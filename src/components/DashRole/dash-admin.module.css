@@ -1,0 +1,27 @@
+.container {
+  width: 100%;
+  display: grid;
+  gap: 16px;
+}
+
+/* aumenta os ícones dentro dos Cards do AntD */
+.iconLarge :global(.ant-card .anticon) {
+  font-size: 28px;
+}
+
+/* grids 2 colunas com fallback responsivo */
+.grid2 {
+  display: grid;
+  grid-template-columns: 1fr 380px;
+  gap: 16px;
+}
+
+@media (max-width: 992px) {
+  .grid2 {
+    grid-template-columns: 1fr;
+  }
+}
+
+.adminScaleLg :global(.ant-card) :global(.anticon) {
+  font-size: 28px;
+}

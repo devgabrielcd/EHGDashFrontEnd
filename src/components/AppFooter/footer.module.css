@@ -1,0 +1,16 @@
+/* Estilos padrão */
+.footer {
+    background-color: var(--primary);
+    color: var(--octonary);
+    /* border-top: 1px solid var(--secondary);*/
+    text-align: center;
+    padding: 16px; /* Adiciona algum padding */
+  }
+  
+  /* Estilos para o modo escuro */
+  :global(.dark) .footer {
+    background-color: var(--octonary);
+    color: var(--primary);
+    /* border-top: 1px solid var(--septenary);*/
+  }
+  

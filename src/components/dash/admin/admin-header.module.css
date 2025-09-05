@@ -1,0 +1,53 @@
+.card {
+  background: #fff;
+  border: 1px solid #f0f0f0;
+  border-radius: 10px;
+  padding: 16px 18px;
+  box-shadow: 0 2px 8px rgba(0,0,0,0.04);
+}
+
+.headerRow {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.title {
+  margin: 0;
+  font-size: 20px;
+  line-height: 1.25;
+  font-weight: 700;
+  color: #111827;
+}
+
+.metaRow {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px 12px;
+  margin-top: 8px;
+  align-items: center;
+}
+
+.muted {
+  color: #6b7280;
+  font-size: 14px;
+}
+
+.tag {
+  display: inline-block;
+  padding: 2px 10px;
+  font-size: 12px;
+  font-weight: 700;
+  border-radius: 8px;
+  line-height: 1.6;
+}
+
+.tagBlue {
+  background: #eef2ff;
+  color: #3730a3;
+}
+
+.tagPurple {
+  background: #f5f3ff;
+  color: #6d28d9;
+}

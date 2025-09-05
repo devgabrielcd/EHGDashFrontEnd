@@ -1,0 +1,63 @@
+@import url('https://fonts.googleapis.com/css2?family=Bruno+Ace+SC&display=swap');
+
+.header {
+  position: fixed;
+  top: 0;
+  left: calc(var(--sidebar-w, 200px) + 4.8px); /* Ajuste aqui */
+  width: calc(100% - var(--sidebar-w, 200px) - 4px); /* E aqui */
+  height: 64px;
+  background-color: var(--octonary, #0f1115);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0 16px;
+  z-index: 1000;
+  transition: background-color .3s, color .3s, padding-left .2s ease;
+}
+
+.logoContainer { 
+  display: flex; 
+  align-items: center; 
+  gap: .5rem; 
+}
+
+.logoText {
+  font-family: "Bruno Ace SC", sans-serif;
+  font-size: 2rem;
+  font-weight: 400;
+  color: var(--primary, #fff);
+  text-decoration: none;
+}
+
+.searchContainer { 
+  flex: 1; 
+  display: flex; 
+  justify-content: center; 
+}
+
+.userContainer { 
+  display: flex; 
+  align-items: center; 
+  gap: .75rem; 
+}
+
+.userInfo { 
+  color: var(--primary, #fff); 
+  font-weight: 600; 
+  line-height: 1.2; 
+  font-size: .9rem; 
+}
+
+.userInfo p { 
+  margin: 0; 
+}
+
+/* claro */
+:global(html:not(.dark)) .header {
+  background-color: var(--primary, #ffffff);
+}
+
+:global(html:not(.dark)) .logoText,
+:global(html:not(.dark)) .userInfo p {
+  color: var(--quinary, #111);
+}

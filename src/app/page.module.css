@@ -1,0 +1,207 @@
+/* Fullscreen container with background image */
+.container {
+  position: relative;
+  width: 100vw;
+  height: 100vh;
+  background: url("/images/company.webp") no-repeat center center;
+  background-size: cover;
+  display: grid;
+  grid-template-columns: 1fr 1fr; /* left (form) | right (hero) */
+}
+
+/* Left panel with glass effect */
+.leftPanel {
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(255, 255, 255, 0.18);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  padding: 32px;
+}
+
+/* Login card — centered content */
+.card {
+  width: 100%;
+  max-width: 420px;
+  background: rgba(255, 255, 255, 0.9);
+  border-radius: 14px;
+  box-shadow: 0 10px 30px rgba(0,0,0,0.12);
+  padding: 28px 24px;
+  animation: floatIn 400ms ease;
+  display: flex;               /* centralização */
+  flex-direction: column;      /* centralização */
+  align-items: center;         /* centralização */
+  text-align: center;          /* centralização */
+}
+
+@keyframes floatIn {
+  from { transform: translateY(8px); opacity: 0; }
+  to   { transform: translateY(0);   opacity: 1; }
+}
+
+.title {
+  font-size: 1.8rem;
+  line-height: 1.25;
+  font-weight: 700;
+  color: #111827;
+  margin-bottom: 8px;
+}
+
+.subtitle {
+  color: #4b5563;
+  font-size: 0.98rem;
+  margin-bottom: 18px;
+}
+
+/* wrapper for your <SignIn /> */
+.formWrapper {
+  margin-top: 8px;
+  width: 100%;                 /* ocupa toda a largura do card */
+  max-width: 360px;            /* mantém o form elegante e centrado */
+}
+
+/* auxiliary links below the form */
+.authLinks {
+  display: flex;
+  justify-content: center;     /* centraliza os links também */
+  margin-top: 12px;
+}
+.mutedLink {
+  font-size: 0.9rem;
+  color: #6b7280;
+  text-decoration: none;
+}
+.mutedLink:hover {
+  text-decoration: underline;
+}
+
+/* registration CTA */
+.registerBox {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  justify-content: center;
+  margin-top: 18px;
+  font-size: 0.95rem;
+  color: #374151;
+}
+.registerLink {
+  color: #0070f3;
+  text-decoration: none;
+  font-weight: 600;
+}
+.registerLink:hover {
+  text-decoration: underline;
+}
+
+/* Buttons */
+.primaryBtn {
+  display: inline-block;
+  width: 100%;
+  max-width: 360px;            /* mesmo alinhamento do form */
+  text-align: center;
+  margin-top: 10px;
+  background-color: #111827;
+  color: #fff;
+  border: none;
+  padding: 12px 16px;
+  font-size: 1rem;
+  border-radius: 10px;
+  cursor: pointer;
+  text-decoration: none;
+}
+.primaryBtn:hover {
+  background-color: #0b0f1a;
+  padding: 12px 16px;
+}
+
+
+.signoutBtn {
+  display: inline-block;
+  width:50%;
+  max-width: 360px;            /* mesmo alinhamento do form */
+  text-align: center;
+  margin-top: 10px;
+  background-color: #111827;
+  color: #fff;
+  border: none;
+  padding: 12px 16px;
+  font-size: 1rem;
+  border-radius: 10px;
+  cursor: pointer;
+  text-decoration: none;
+}
+.signoutBtn:hover {
+  background-color: #0b0f1a;
+  padding: 12px 16px;
+}
+
+/* Right panel with hero/branding */
+.rightPanel {
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;   /* empurra conteúdo para a direita */
+  padding: 48px;
+}
+
+/* Move the white text further to the right to avoid the white coat area */
+.rightContent {
+  max-width: 560px;
+  color: #ffffff;
+  text-shadow: 0 1px 16px rgba(0,0,0,0.25);
+  animation: fadeInRight 500ms ease;
+  margin-left: auto;           /* gruda no lado direito */
+  padding-right: 6vw;          /* desloca um pouco mais à direita */
+  /* opcional: leve sombra/contorno adicional se o fundo for claro */
+  /* text-shadow: 0 1px 16px rgba(0,0,0,0.35); */
+}
+
+@keyframes fadeInRight {
+  from { transform: translateX(8px); opacity: 0; }
+  to   { transform: translateX(0);   opacity: 1; }
+}
+
+.heroTitle {
+  font-size: 2.4rem;
+  line-height: 1.2;
+  font-weight: 800;
+  margin-bottom: 12px;
+}
+.heroSubtitle {
+  font-size: 1.1rem;
+  opacity: 0.98;
+  margin-bottom: 18px;
+}
+
+/* Responsive */
+@media (max-width: 1024px) {
+  .container {
+    grid-template-columns: 1.1fr 0.9fr;
+  }
+  .rightContent {
+    padding-right: 4vw;        /* reduz deslocamento em telas médias */
+  }
+}
+@media (max-width: 860px) {
+  .container {
+    grid-template-columns: 1fr;
+  }
+  .leftPanel, .rightPanel {
+    padding: 24px;
+  }
+  .rightPanel {
+    order: -1;
+    justify-content: center;
+    text-align: center;
+  }
+  .rightContent {
+    max-width: 92%;
+    margin-left: 0;            /* centraliza no mobile */
+    padding-right: 0;
+  }
+}
+
+
