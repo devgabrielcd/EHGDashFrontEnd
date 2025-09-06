@@ -3,7 +3,7 @@
 import React from "react";
 import { Row, Col, Space } from "antd";
 
-import AdminHeader from "@/components/dash/admin/AdminHeader";        // agora é server-safe (sem AntD)
+import AdminHeader from "@/components/dash/admin/AdminHeader";
 import KPIGrid from "@/components/dash/admin/KPIGrid";
 import RevenueChart from "@/components/dash/admin/RevenueChart";
 import RecentActivity from "@/components/dash/admin/RecentActivity";
@@ -13,14 +13,25 @@ import TopEntities from "@/components/dash/admin/TopEntities";
 
 import styles from "./dash-admin.module.css";
 
-export default function DashAdmin() {
+const API_BASE = process.env.BACKEND_BASE_URL ?? "http://localhost:8000";
+
+export default async function DashAdmin() {
+  // 1) Buscar KPIs reais
+  const res = await fetch(`${API_BASE}/sheets/stats/`, { cache: "no-store" });
+  if (!res.ok) {
+    console.error("Erro ao buscar KPIs:", res.status, res.statusText);
+  }
+  const stats = res.ok ? await res.json() : { total_users: 0, h4h_users: 0, qol_users: 0 };
+
+  // 2) Montar os cards com dados reais
   const kpis = [
-    { key: "total_users", title: "Total Users", value: 1280, icon: "user", color: "#1890ff" },
-    { key: "h4h_users", title: "H4H Users", value: 632, icon: "team", color: "#fa8c16" },
-    { key: "qol_users", title: "QoL Users", value: 743, icon: "team", color: "#722ed1" },
-    { key: "reports", title: "Reports", value: 122, icon: "file", color: "#52c41a" },
+    { key: "total_users", title: "Total Users", value: stats.total_users, icon: "user", color: "#1890ff" },
+    { key: "h4h_users",   title: "H4H Users",   value: stats.h4h_users,   icon: "team", color: "#fa8c16" },
+    { key: "qol_users",   title: "QoL Users",   value: stats.qol_users,   icon: "team", color: "#722ed1" },
+    { key: "reports",     title: "Reports",     value: 122,               icon: "file", color: "#52c41a" }, // mantém mock por enquanto
   ];
 
+  // (demais mocks seus, mantidos por enquanto)
   const activity = [
     { time: "Today 10:24", text: "Backup completed", color: "green" },
     { time: "Yesterday 17:03", text: "Deploy v1.4.2 to production", color: "blue" },
@@ -35,17 +46,9 @@ export default function DashAdmin() {
     { title: "Settings", href: "/settings", icon: "setting", color: "#52c41a" },
   ];
 
-  const topEntities = [
-    { key: "1", name: "Acme Ltd", metric: 98, trend: "up" },
-    { key: "2", name: "Globex", metric: 86, trend: "down" },
-    { key: "3", name: "Umbrella", metric: 74, trend: "up" },
-    { key: "4", name: "Initech", metric: 66, trend: "flat" },
-  ];
-
   return (
     <div className={styles.adminScaleLg}>
       <Space direction="vertical" size={16} style={{ width: "100%" }}>
-        {/* 👉 passa o user COMPLETO; o header resolve .details internamente */}
         <AdminHeader />
 
         <KPIGrid items={kpis} />
@@ -68,7 +71,8 @@ export default function DashAdmin() {
           </Col>
         </Row>
 
-        <TopEntities items={topEntities} />
+        {/* Agora TopEntities busca do backend e tem filtro por empresa */}
+        <TopEntities />
       </Space>
     </div>
   );

@@ -1,9 +1,9 @@
-"use client";
-
+// components/DashRole/DashAdmin.jsx
+// SERVER COMPONENT
 import React from "react";
 import { Row, Col, Space } from "antd";
 
-import AdminHeader from "@/components/dash/admin/AdminHeader";
+import AdminHeader from "@/components/dash/admin/AdminHeader";        // agora é server-safe (sem AntD)
 import KPIGrid from "@/components/dash/admin/KPIGrid";
 import RevenueChart from "@/components/dash/admin/RevenueChart";
 import RecentActivity from "@/components/dash/admin/RecentActivity";
@@ -11,8 +11,9 @@ import SystemHealth from "@/components/dash/admin/SystemHealth";
 import QuickLinks from "@/components/dash/admin/QuickLinks";
 import TopEntities from "@/components/dash/admin/TopEntities";
 
-export default function DashAdmin({ user }) {
-  // ✅ KPIs mockados
+import styles from "./dash-admin.module.css";
+
+export default function DashAdmin() {
   const kpis = [
     { key: "total_users", title: "Total Users", value: 1280, icon: "user", color: "#1890ff" },
     { key: "h4h_users", title: "H4H Users", value: 632, icon: "team", color: "#fa8c16" },
@@ -40,17 +41,15 @@ export default function DashAdmin({ user }) {
     { key: "3", name: "Umbrella", metric: 74, trend: "up" },
     { key: "4", name: "Initech", metric: 66, trend: "flat" },
   ];
-        console.log("DashAdminLog", user);
-  return (
-    <div className="admin-scale-lg">
-      <Space direction="vertical" size={16} style={{ width: "100%" }}>
-        <AdminHeader user={user} />
 
-        
+  return (
+    <div className={styles.adminScaleLg}>
+      <Space direction="vertical" size={16} style={{ width: "100%" }}>
+        {/* 👉 passa o user COMPLETO; o header resolve .details internamente */}
+        <AdminHeader />
 
         <KPIGrid items={kpis} />
 
-        {/* Primeira linha */}
         <Row gutter={[16, 16]}>
           <Col xs={24} lg={15}>
             <RevenueChart title="Clients Added (last 12 months)" />
@@ -60,7 +59,6 @@ export default function DashAdmin({ user }) {
           </Col>
         </Row>
 
-    {/* Segunda linha */}
         <Row gutter={[16, 16]}>
           <Col xs={24} lg={15}>
             <RecentActivity items={activity} />
@@ -69,14 +67,9 @@ export default function DashAdmin({ user }) {
             <QuickLinks items={links} />
           </Col>
         </Row>
+
         <TopEntities items={topEntities} />
       </Space>
-
-      <style jsx global>{`
-        .admin-scale-lg .ant-card .anticon {
-          font-size: 28px; /* ícones maiores */
-        }
-      `}</style>
     </div>
   );
 }
