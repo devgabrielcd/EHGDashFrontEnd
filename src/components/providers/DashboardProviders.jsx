@@ -4,7 +4,7 @@
 import React from "react";
 import "@ant-design/v5-patch-for-react-19";
 import "antd/dist/reset.css";
-import { ConfigProvider, theme as antdTheme, Spin } from "antd";
+import { ConfigProvider, theme as antdTheme, Spin, App } from "antd"; // 👈 Importamos o App aqui
 import { Provider as ReduxProvider } from "react-redux";
 import { store } from "@/components/redux/store";
 import { useTheme } from "next-themes";
@@ -30,14 +30,14 @@ function HydrationGate({ children }) {
 }
 
 function ThemedShell({ children }) {
-  const { resolvedTheme } = useTheme();      // ← integra com next-themes
+  const { resolvedTheme } = useTheme(); // ← integra com next-themes
   const isDark = resolvedTheme === "dark";
 
   const ui = React.useMemo(
     () => ({
       bgLayout: isDark ? "#0b0d11" : "#edf0f5",
-      bgPanel:  isDark ? "#0f1115" : "#ffffff",
-      border:   isDark ? "#1f2937" : "#c0c4cc",
+      bgPanel: isDark ? "#0f1115" : "#ffffff",
+      border: isDark ? "#1f2937" : "#c0c4cc",
     }),
     [isDark]
   );
@@ -54,15 +54,18 @@ function ThemedShell({ children }) {
 
   return (
     <ConfigProvider theme={antdConfig}>
-      {/* CSS vars que o restante do app usa (Sidebar, etc) */}
-      <style jsx global>{`
-        :root {
-          --bg-layout: ${ui.bgLayout};
-          --bg-panel: ${ui.bgPanel};
-          --border-strong: ${ui.border};
-        }
-      `}</style>
-      {children}
+      {/* 👈 Adicione o provedor App aqui */}
+      <App>
+        {/* CSS vars que o restante do app usa (Sidebar, etc) */}
+        <style jsx global>{`
+          :root {
+            --bg-layout: ${ui.bgLayout};
+            --bg-panel: ${ui.bgPanel};
+            --border-strong: ${ui.border};
+          }
+        `}</style>
+        {children}
+      </App>
     </ConfigProvider>
   );
 }

@@ -1,8 +1,10 @@
 'use client';
 
 import React, { useEffect, useMemo, useState } from 'react';
-import { Card, Table, Tag, Select, Space } from 'antd';
+import { Card, Table, Tag, Select, Space, Typography, Spin } from 'antd';
+import { useSession } from 'next-auth/react';
 
+const { Text } = Typography;
 const API_BASE = process.env.NEXT_PUBLIC_BACKEND_BASE_URL ?? 'http://localhost:8000';
 
 function formatDate(iso) {
@@ -13,20 +15,47 @@ function formatDate(iso) {
 }
 
 export default function TopEntities() {
+  const { data: session, status } = useSession();
+
   const [companyOptions, setCompanyOptions] = useState([{ label: 'All', value: 'all' }]);
   const [companyLoading, setCompanyLoading] = useState(true);
   const [selectedCompany, setSelectedCompany] = useState('all');
 
   const [rows, setRows] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [errorMsg, setErrorMsg] = useState('');
 
-  // 1) Carregar empresas
+  // Espera o next-auth resolver a sessão
+  if (status === 'loading') {
+    return (
+      <Card title="Latest users">
+        <Spin />
+      </Card>
+    );
+  }
+
+  // Se não tiver sessão, evita bater no endpoint protegido
+  if (!session) {
+    return (
+      <Card title="Latest users">
+        <Text type="secondary">You must be logged in to view this data.</Text>
+      </Card>
+    );
+  }
+
+  // 1) Empresas (seu endpoint parece público, mas vamos mandar cookies mesmo assim)
   useEffect(() => {
     let alive = true;
     (async () => {
       try {
         setCompanyLoading(true);
-        const res = await fetch(`${API_BASE}/company/list/`, { cache: 'no-store' });
+        const res = await fetch(`${API_BASE}/company/list/`, {
+          cache: 'no-store',
+          credentials: 'include',
+        });
+        if (!res.ok) {
+          console.warn('company/list/ status:', res.status);
+        }
         const json = res.ok ? await res.json() : [];
         if (!alive) return;
 
@@ -43,37 +72,54 @@ export default function TopEntities() {
       }
     })();
     return () => { alive = false; };
-  }, []);
+  }, [session]);
 
-  // 2) Buscar usuários
+  // 2) URL correta dos usuários protegidos (pelo seu urls.py é /api/users/)
   const dataUrl = useMemo(() => {
     if (selectedCompany !== 'all') {
-      return `${API_BASE}/sheets/sheet-data/?company=${encodeURIComponent(selectedCompany)}`;
+      return `${API_BASE}/api/users/?company=${encodeURIComponent(selectedCompany)}`;
     }
-    return `${API_BASE}/sheets/sheet-data/`;
+    return `${API_BASE}/api/users/`; // barra final OK com DRF
   }, [selectedCompany]);
 
+  // 3) Buscar usuários (precisa estar autenticado e ser admin no backend)
   useEffect(() => {
     let alive = true;
     (async () => {
       try {
+        setErrorMsg('');
         setLoading(true);
-        const res = await fetch(dataUrl, { cache: 'no-store' });
-        const json = res.ok ? await res.json() : [];
+        const res = await fetch(dataUrl, {
+          cache: 'no-store',
+          credentials: 'include',   // manda cookie de sessão
+        });
+
+        if (!res.ok) {
+          // Log amigável pra depurar 401/403
+          const bodyText = await res.text().catch(() => '');
+          console.warn('GET', dataUrl, 'status:', res.status, 'body:', bodyText);
+          if (res.status === 401) setErrorMsg('Unauthorized (401). Are you logged in on the backend?');
+          if (res.status === 403) setErrorMsg('Forbidden (403). Your role must be admin to list users.');
+          setRows([]);
+          return;
+        }
+
+        const json = await res.json();
         if (!alive) return;
         setRows(Array.isArray(json) ? json : []);
       } catch (e) {
-        console.error('Erro ao carregar sheet-data:', e);
+        console.error('Erro ao carregar users:', e);
         if (!alive) return;
+        setErrorMsg('Failed to fetch users.');
         setRows([]);
       } finally {
         if (alive) setLoading(false);
       }
     })();
     return () => { alive = false; };
-  }, [dataUrl]);
+  }, [dataUrl, session]);
 
-  // 3) Adaptar para tabela
+  // 4) Adaptar para tabela
   const dataSource = useMemo(() => {
     const sorted = [...rows].sort((a, b) => {
       const da = new Date(a?.datetime ?? 0).getTime();
@@ -100,7 +146,7 @@ export default function TopEntities() {
       render: (_v, record) => `${record.firstName || ''} ${record.lastName || ''}`.trim() || '—',
     },
     { title: 'Email', dataIndex: 'email' },
-    { title: 'Phone', dataIndex: 'phone' }, // 👈 novo campo
+    { title: 'Phone', dataIndex: 'phone' },
     {
       title: 'Plan',
       dataIndex: 'insuranceCoverage',
@@ -138,6 +184,7 @@ export default function TopEntities() {
           />
         </Space>
       }
+      extra={errorMsg ? <Text type="danger">{errorMsg}</Text> : null}
     >
       <Table
         size="small"

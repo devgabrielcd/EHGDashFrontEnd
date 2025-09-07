@@ -1,59 +1,56 @@
 // components/DashRole/DashAdmin.jsx
-// SERVER COMPONENT
+"use client";
+
 import React from "react";
 import { Row, Col, Space } from "antd";
+import { useRouter } from "next/navigation";
 
-import AdminHeader from "@/components/dash/admin/AdminHeader";        // agora é server-safe (sem AntD)
-import KPIGrid from "@/components/dash/admin/KPIGrid";
-import RevenueChart from "@/components/dash/admin/RevenueChart";
-import RecentActivity from "@/components/dash/admin/RecentActivity";
-import SystemHealth from "@/components/dash/admin/SystemHealth";
-import QuickLinks from "@/components/dash/admin/QuickLinks";
+import AdminHeader from "@/components/dash/admin/AdminHeader";
+import AdminKpiStats from "@/components/dash/admin/AdminKpiStats";
+import UsersTrendChart from "@/components/dash/admin/UsersTrendChart";
 import TopEntities from "@/components/dash/admin/TopEntities";
 
+// (opcionais — mantém seus widgets atuais)
+import SystemHealth from "@/components/dash/admin/SystemHealth";
+import QuickLinks from "@/components/dash/admin/QuickLinks";
+
+import { useUsersFeed } from "@/components/dash/admin/hooks/useUsersFeed";
 import styles from "./dash-admin.module.css";
 
 export default function DashAdmin() {
-  const kpis = [
-    { key: "total_users", title: "Total Users", value: 1280, icon: "user", color: "#1890ff" },
-    { key: "h4h_users", title: "H4H Users", value: 632, icon: "team", color: "#fa8c16" },
-    { key: "qol_users", title: "QoL Users", value: 743, icon: "team", color: "#722ed1" },
-    { key: "reports", title: "Reports", value: 122, icon: "file", color: "#52c41a" },
-  ];
+  const router = useRouter();
 
-  const activity = [
-    { time: "Today 10:24", text: "Backup completed", color: "green" },
-    { time: "Yesterday 17:03", text: "Deploy v1.4.2 to production", color: "blue" },
-    { time: "Yesterday 16:21", text: "2 alerts resolved", color: "gray" },
-    { time: "Yesterday 11:00", text: "New user (Employee02)", color: "green" },
-  ];
+  // 🔌 único ponto de dados da home: tudo vem do /api/users/ com Bearer next-auth
+  const { totals, weekly, loading } = useUsersFeed();
 
+  // seus quick links antigos (ajuste rotas se quiser)
   const links = [
-    { title: "Manage Users", href: "/settings/users", icon: "user", color: "#1890ff" },
-    { title: "Teams & Permissions", href: "/settings/team", icon: "team", color: "#fa8c16" },
-    { title: "Reports", href: "/reports", icon: "file", color: "#722ed1" },
-    { title: "Settings", href: "/settings", icon: "setting", color: "#52c41a" },
-  ];
-
-  const topEntities = [
-    { key: "1", name: "Acme Ltd", metric: 98, trend: "up" },
-    { key: "2", name: "Globex", metric: 86, trend: "down" },
-    { key: "3", name: "Umbrella", metric: 74, trend: "up" },
-    { key: "4", name: "Initech", metric: 66, trend: "flat" },
+    { title: "Manage Users", href: "/dashboard/admin/user-accounts", icon: "user", color: "#1890ff" },
+    { title: "Teams & Permissions", href: "/dashboard/admin/teams", icon: "team", color: "#fa8c16" },
+    { title: "Reports", href: "/dashboard/admin/reports", icon: "file", color: "#722ed1" },
+    { title: "Settings", href: "/dashboard/admin/settings", icon: "setting", color: "#52c41a" },
   ];
 
   return (
     <div className={styles.adminScaleLg}>
       <Space direction="vertical" size={16} style={{ width: "100%" }}>
-        {/* 👉 passa o user COMPLETO; o header resolve .details internamente */}
-        <AdminHeader />
+        {/* Header já conectado ao feed e com atalhos */}
+        <AdminHeader
+          onGoUsers={() => router.push("/dashboard/admin/user-accounts")}
+          onGoTeams={() => router.push("/dashboard/admin/teams")}
+          onGoSettings={() => router.push("/dashboard/admin/settings")}
+        />
 
-        <KPIGrid items={kpis} />
+        {/* KPIs (Total, Active, ranking de role/type/company) */}
+        <AdminKpiStats totals={totals} loading={loading} />
 
         <Row gutter={[16, 16]}>
+          {/* Gráfico semanal de cadastros */}
           <Col xs={24} lg={15}>
-            <RevenueChart title="Clients Added (last 12 months)" />
+            <UsersTrendChart weekly={weekly} loading={loading} />
           </Col>
+
+          {/* Seus widgets extras continuam valendo */}
           <Col xs={24} lg={9}>
             <SystemHealth />
           </Col>
@@ -61,14 +58,13 @@ export default function DashAdmin() {
 
         <Row gutter={[16, 16]}>
           <Col xs={24} lg={15}>
-            <RecentActivity items={activity} />
+            {/* Tabela “Latest users” (já migrada para /api/users/ no nosso ajuste anterior) */}
+            <TopEntities />
           </Col>
           <Col xs={24} lg={9}>
             <QuickLinks items={links} />
           </Col>
         </Row>
-
-        <TopEntities items={topEntities} />
       </Space>
     </div>
   );

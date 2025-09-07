@@ -3,13 +3,14 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { Card, Space, Progress, Select, Divider, Empty } from 'antd';
 import { CloudOutlined } from '@ant-design/icons';
+import { useSession } from 'next-auth/react';
 
 const API_BASE = process.env.NEXT_PUBLIC_BACKEND_BASE_URL ?? 'http://localhost:8000';
 
 const VIEW_OPTIONS = [
   { label: 'Top Insurance Lines', value: 'insurance' },
   { label: 'Plan Types', value: 'planTypes' },
-  { label: 'Form Types', value: 'formTypes' },
+  { label: 'Form Types', value: 'formTypes' }, // users API não tem formType (vai ficar vazio)
 ];
 
 function percent(part, total) {
@@ -31,6 +32,8 @@ function toSortedArray(map) {
 }
 
 export default function SystemHealth() {
+  const { data: session, status } = useSession();
+
   const [companyOptions, setCompanyOptions] = useState([{ label: 'All', value: 'all' }]);
   const [companyLoading, setCompanyLoading] = useState(true);
   const [selectedCompany, setSelectedCompany] = useState('all');
@@ -38,10 +41,14 @@ export default function SystemHealth() {
   const [rows, setRows] = useState([]);
   const [loading, setLoading] = useState(true);
 
-  const [viewMode, setViewMode] = useState('insurance'); // insurance | planTypes | formTypes
+  const [viewMode, setViewMode] = useState('insurance');
   const palette = ['#1677ff', '#52c41a', '#fa8c16', '#722ed1', '#13c2c2', '#eb2f96', '#a0d911'];
 
-  // Empresas
+  // 🔧 Só desabilite quando REALMENTE estiver deslogado
+  const disabled = status === 'unauthenticated';
+  const isLoadingSession = status === 'loading';
+
+  // Empresas (público)
   useEffect(() => {
     let alive = true;
     (async () => {
@@ -63,20 +70,25 @@ export default function SystemHealth() {
     return () => { alive = false; };
   }, []);
 
-  // Dados
+  // URL de dados protegida
   const dataUrl = useMemo(() => {
-    if (selectedCompany !== 'all') {
-      return `${API_BASE}/sheets/sheet-data/?company=${encodeURIComponent(selectedCompany)}`;
-    }
-    return `${API_BASE}/sheets/sheet-data/`;
+    const base = new URL(`${API_BASE}/api/users/`);
+    if (selectedCompany !== 'all') base.searchParams.set('company', selectedCompany);
+    return base.toString();
   }, [selectedCompany]);
 
+  // Busca de dados com Bearer
   useEffect(() => {
+    if (status !== 'authenticated' || !session?.accessToken) return;
+
     let alive = true;
     (async () => {
       try {
         setLoading(true);
-        const res = await fetch(dataUrl, { cache: 'no-store' });
+        const res = await fetch(dataUrl, {
+          cache: 'no-store',
+          headers: { Authorization: `Bearer ${session.accessToken}` },
+        });
         const json = res.ok ? await res.json() : [];
         if (!alive) return;
         setRows(Array.isArray(json) ? json : []);
@@ -87,15 +99,16 @@ export default function SystemHealth() {
         if (alive) setLoading(false);
       }
     })();
+
     return () => { alive = false; };
-  }, [dataUrl]);
+  }, [dataUrl, session?.accessToken, status]);
 
   // Agregações
   const { total, byInsurance, byCoverageType, byFormType } = useMemo(() => {
     const total = rows.length;
     const byInsurance = toSortedArray(counterMap(rows, 'insuranceCoverage'));
     const byCoverageType = toSortedArray(counterMap(rows, 'coverageType'));
-    const byFormType = toSortedArray(counterMap(rows, 'formType'));
+    const byFormType = toSortedArray(counterMap(rows, 'formType')); // tende a ficar vazio
     return { total, byInsurance, byCoverageType, byFormType };
   }, [rows]);
 
@@ -119,12 +132,14 @@ export default function SystemHealth() {
             options={companyOptions}
             loading={companyLoading}
             style={{ width: 180 }}
+            disabled={disabled}
           />
           <Select
             value={viewMode}
             onChange={setViewMode}
             options={VIEW_OPTIONS}
             style={{ width: 190 }}
+            disabled={disabled}
           />
           <CloudOutlined />
         </Space>
@@ -132,10 +147,13 @@ export default function SystemHealth() {
     >
       <Divider style={{ marginTop: 0, marginBottom: 12 }}>{section.title}</Divider>
 
-      {/* Área compacta com scroll interno (reduzida) */}
       <div style={{ maxHeight: 240, overflowY: 'auto', paddingRight: 8 }}>
-        {loading ? (
-          <div style={{ padding: 8 }}>Carregando...</div>
+        {disabled ? (
+          <div style={{ padding: 8 }}>Faça login para visualizar.</div>
+        ) : isLoadingSession ? (
+          <div style={{ padding: 8 }}>Carregando sessão…</div>
+        ) : loading ? (
+          <div style={{ padding: 8 }}>Carregando…</div>
         ) : section.data.length ? (
           <Space direction="vertical" style={{ width: '100%' }}>
             {section.data.map((item, idx) => (

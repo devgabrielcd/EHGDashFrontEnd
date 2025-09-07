@@ -1,25 +1,42 @@
-'use client';
+// components/dash/admin/AdminHeader.jsx
+// SERVER COMPONENT
+import React from "react";
+import { Card, Space, Tag } from "antd";
+import { auth } from "@/auth";
 
-import React from 'react';
-import { Card, Space, Typography, Tag } from 'antd';
+export default async function AdminHeader() {
+  const session = await auth();
+  const user = session.user;
+  const fullName = [user.details.first_name, user.details.middle_name, user.details.last_name].filter(Boolean).join(' ') || user?.user;
 
-const { Title, Text } = Typography;
-
-export default function AdminHeader({ user }) {
-  const fullName = [user?.first_name, user?.middle_name, user?.last_name].filter(Boolean).join(' ') || user?.user;
-    console.log("AdminHeaderLoogg",fullName);
+  console.log('AdminHeaderLog', user);
   
-  return (
-    <Card>
-      <Space direction="vertical" size={4} style={{ width: '100%' }}>
-        <Title level={3} style={{ margin: 0 }}>Welcome, {fullName || 'Admin'}</Title>
-        <Space wrap>
-          {user?.user_type ? <Tag color="geekblue">{String(user.user_type).toUpperCase()}</Tag> : null}
-          {user?.user_role ? <Tag color="purple">{String(user.user_role).toUpperCase()}</Tag> : null}
-          {user?.email ? <Text type="secondary">Email: {user.email}</Text> : null}
-          {user?.phone_number ? <Text type="secondary">Phone: {user.phone_number}</Text> : null}
+  const labelStyle = { color: "#6b7280", fontSize: 14 }; // gray-500/600
+  if (session) {
+    return (
+      <Card>
+        <Space direction="vertical" size={6} style={{ width: "100%" }}>
+          <h3 style={{ margin: 0, fontSize: 20, fontWeight: 700 }}>
+            Welcome, {fullName}
+          </h3>
+
+          <Space wrap>
+            {user.details.user_type ? (
+              <Tag color="geekblue">{String(user.details.user_type).toUpperCase()}</Tag>
+            ) : null}
+            {user.details.user_role ? (
+              <Tag color="purple">{String(user.details.user_role).toUpperCase()}</Tag>
+            ) : null}
+
+            {user.details.email ? (
+              <span style={labelStyle}>Email: {user.details.email}</span>
+            ) : null}
+            {user.details.phone_number ? (
+              <span style={labelStyle}>Phone: {user.details.phone_number}</span>
+            ) : null}
+          </Space>
         </Space>
-      </Space>
-    </Card>
-  );
+      </Card>
+    );
+  }
 }

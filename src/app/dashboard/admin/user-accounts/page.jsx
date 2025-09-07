@@ -1,384 +1,384 @@
+// src/app/dashboard/admin/user-accounts/page.jsx
 "use client";
 
-import React, { useMemo, useState } from "react";
-import useSWR from "swr";
+import React, { useEffect, useState, useCallback } from "react";
 import {
+  App,
+  Card,
   Table,
-  Button,
-  Space,
   Tag,
+  Space,
+  Input,
+  Button,
+  Popconfirm,
   Modal,
   Form,
-  Input,
   Select,
-  Switch,
-  message,
-  Popconfirm,
 } from "antd";
 import {
+  ReloadOutlined,
   EditOutlined,
   DeleteOutlined,
-  ReloadOutlined,
   PlusOutlined,
 } from "@ant-design/icons";
+import { useSession } from "next-auth/react";
 
-const API_USERS = "/api/users/users/";
-const API_ROLES = "/api/users/roles/";
-const API_TYPES = "/api/users/types/";
+const API_BASE =
+  process.env.NEXT_PUBLIC_BACKEND_BASE_URL ?? "http://localhost:8000";
 
-const fetcher = (url) =>
-  fetch(url, { credentials: "include" }).then((r) => {
-    if (!r.ok) throw new Error("Request failed");
-    return r.json();
-  });
+/** -------- Modal de Create/Edit -------- */
+const UserForm = ({
+  open,
+  onCancel,
+  onSave,
+  initialData, // { user: {...}, profile: {...} } (somente no Edit)
+  isEdit,
+  roles,
+  types,
+}) => {
+  const [form] = Form.useForm();
 
-const toOptions = (arr) => (arr || []).map((x) => ({ label: x.name, value: x.id }));
-
-export default function UsersPage() {
-  // filtros
-  const [q, setQ] = useState("");
-  const [active, setActive] = useState(undefined);
-
-  const query = useMemo(() => {
-    const p = new URLSearchParams();
-    if (q) p.set("q", q);
-    if (active !== undefined) p.set("active", active ? "1" : "0");
-    p.set("limit", "50");
-    p.set("offset", "0");
-    return `${API_USERS}?${p.toString()}`;
-  }, [q, active]);
-
-  const { data, isLoading, mutate } = useSWR(query, fetcher);
-  const rows = data?.results || [];
-
-  // opções para selects
-  const { data: rolesData } = useSWR(API_ROLES, fetcher);
-  const { data: typesData } = useSWR(API_TYPES, fetcher);
-  const roleOptions = toOptions(rolesData);
-  const typeOptions = toOptions(typesData);
-
-  // EDIT modal
-  const [editOpen, setEditOpen] = useState(false);
-  const [editForm] = Form.useForm();
-
-  // CREATE modal
-  const [createOpen, setCreateOpen] = useState(false);
-  const [createForm] = Form.useForm();
-
-  const openEdit = (record) => {
-    editForm.setFieldsValue({
-      id: record?.user?.id,
-      username: record?.user?.username,
-      email: record?.user?.email,
-      first_name: record?.user?.first_name,
-      last_name: record?.user?.last_name,
-      is_active: record?.user?.is_active,
-      user_role_id: record?.profile?.user_role_id,
-      user_type_id: record?.profile?.user_type_id,
-      department: record?.profile?.department,
-      job_title: record?.profile?.job_title,
-      location: record?.profile?.location,
-      phone_number: record?.profile?.phone_number,
-    });
-    setEditOpen(true);
-  };
-
-  const saveEdit = async () => {
-    try {
-      const values = await editForm.validateFields();
-      const res = await fetch(`${API_USERS}${values.id}/`, {
-        method: "PATCH",
-        credentials: "include",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(values),
+  useEffect(() => {
+    if (!open) return;
+    if (initialData?.user) {
+      form.setFieldsValue({
+        username: initialData.user.username,
+        email: initialData.user.email,
+        first_name: initialData.user.first_name,
+        last_name: initialData.user.last_name,
+        user_role_id: initialData.profile?.user_role_id,
+        user_type_id: initialData.profile?.user_type_id,
       });
-      if (!res.ok) throw new Error("Failed to update");
-      message.success("User updated");
-      setEditOpen(false);
-      editForm.resetFields();
-      mutate();
-    } catch (e) {
-      console.error(e);
-      message.error("Error updating user");
+    } else {
+      form.resetFields();
     }
+  }, [initialData, open, form]);
+
+  const handleSave = () => {
+    form
+      .validateFields()
+      .then((values) => onSave(values))
+      .catch(() => {});
   };
 
-  const onDelete = async (id, hard = false) => {
-    try {
-      const res = await fetch(`${API_USERS}${id}/?hard=${hard ? "1" : "0"}`, {
-        method: "DELETE",
-        credentials: "include",
+  return (
+    <Modal
+      open={open}
+      title={isEdit ? "Edit User" : "Create New User"}
+      okText={isEdit ? "Update" : "Create"}
+      onCancel={onCancel}
+      onOk={handleSave}
+    >
+      <Form form={form} layout="vertical" name="user_form">
+        <Form.Item
+          name="username"
+          label="Username"
+          rules={[{ required: true, message: "Please input the username!" }]}
+        >
+          <Input />
+        </Form.Item>
+
+        <Form.Item
+          name="email"
+          label="Email"
+          rules={[
+            { required: true, message: "Please input the email!" },
+            { type: "email" },
+          ]}
+        >
+          <Input />
+        </Form.Item>
+
+        <Form.Item
+          name="password"
+          label="Password"
+          rules={isEdit ? [] : [{ required: true, message: "Please input the password!" }]}
+        >
+          <Input.Password placeholder={isEdit ? "Leave blank to keep current password" : ""} />
+        </Form.Item>
+
+        <Form.Item name="first_name" label="First Name">
+          <Input />
+        </Form.Item>
+
+        <Form.Item name="last_name" label="Last Name">
+          <Input />
+        </Form.Item>
+
+        <Form.Item
+          name="user_role_id"
+          label="User Role"
+          rules={[{ required: true, message: "Please select a role!" }]}
+        >
+          <Select options={roles} />
+        </Form.Item>
+
+        <Form.Item
+          name="user_type_id"
+          label="User Type"
+          rules={[{ required: true, message: "Please select a type!" }]}
+        >
+          <Select options={types} />
+        </Form.Item>
+      </Form>
+    </Modal>
+  );
+};
+
+/** -------- Página -------- */
+export default function UsersManagementPage() {
+  const { message } = App.useApp();
+  const { data: session, status } = useSession();
+
+  const [rows, setRows] = useState([]);            // lista achatada do /api/users/
+  const [loading, setLoading] = useState(true);
+  const [search, setSearch] = useState("");
+
+  const [modalOpen, setModalOpen] = useState(false);
+  const [editDetail, setEditDetail] = useState(null); // detalhe {user, profile} para o Edit
+  const [editingId, setEditingId] = useState(null);   // id do usuário sendo editado
+
+  const [userRoles, setUserRoles] = useState([]);
+  const [userTypes, setUserTypes] = useState([]);
+
+  /** Helpers de fetch com Bearer */
+  const fetchJSON = useCallback(
+    async (url) => {
+      const res = await fetch(url, {
+        headers: { Authorization: `Bearer ${session?.accessToken}` },
       });
-      if (!res.ok) throw new Error("Failed to delete");
-      message.success(hard ? "User removed" : "User deactivated");
-      mutate();
+      const data = await res.json();
+      if (!res.ok) throw new Error(data?.detail || `HTTP ${res.status}`);
+      return data;
+    },
+    [session?.accessToken]
+  );
+
+  /** Carrega lista achatada + selects */
+  const fetchData = useCallback(async () => {
+    if (status !== "authenticated" || !session?.accessToken) {
+      if (status !== "loading") message.error("You need to be authenticated.");
+      setLoading(false);
+      return;
+    }
+    try {
+      setLoading(true);
+
+      const url = new URL(`${API_BASE}/api/users/`);
+      if (search) url.searchParams.set("q", search);
+
+      const [users, roles, types] = await Promise.all([
+        fetchJSON(url.toString()),                   // 👈 array achatado
+        fetchJSON(`${API_BASE}/api/roles/`),         // [{id, name}]
+        fetchJSON(`${API_BASE}/api/types/`),         // [{id, name}]
+      ]);
+
+      setRows(Array.isArray(users) ? users : []);    // 👈 SEM .results
+      setUserRoles(roles.map((r) => ({ label: r.name, value: r.id })));
+      setUserTypes(types.map((t) => ({ label: t.name, value: t.id })));
     } catch (err) {
       console.error(err);
-      message.error("Error deleting user");
+      message.error(err.message || "Failed to load data");
+      setRows([]);
+    } finally {
+      setLoading(false);
+    }
+  }, [status, session?.accessToken, search, fetchJSON, message]);
+
+  useEffect(() => {
+    if (status === "authenticated") fetchData();
+  }, [status, fetchData]);
+
+  /** Abrir modal de criação */
+  const openCreate = () => {
+    setEditingId(null);
+    setEditDetail(null);
+    setModalOpen(true);
+  };
+
+  /** Abrir modal de edição: busca detalhe no endpoint legado /api/detail-user/<id>/ */
+  const openEdit = async (flatRow) => {
+    try {
+      setEditingId(flatRow.id); // id vem do shape achatado
+      const detail = await fetchJSON(`${API_BASE}/api/detail-user/${flatRow.id}/`);
+      // detail = { user: {...}, profile: {...} } com user_role_id/user_type_id
+      setEditDetail(detail);
+      setModalOpen(true);
+    } catch (err) {
+      console.error(err);
+      message.error(err.message || "Failed to load user detail");
     }
   };
 
-  const openCreate = () => {
-    createForm.resetFields();
-    // default: active = true
-    createForm.setFieldsValue({ is_active: true });
-    setCreateOpen(true);
+  /** Criar/Atualizar */
+  const handleSave = async (values) => {
+    const isEdit = !!editingId;
+    const endpoint = isEdit
+      ? `${API_BASE}/api/users/${editingId}/`
+      : `${API_BASE}/api/users/`;
+    const method = isEdit ? "PATCH" : "POST";
+
+    const payload = {
+      username: values.username,
+      email: values.email,
+      password: values.password,          // pode ser undefined no edit (servidor ignora)
+      first_name: values.first_name,
+      last_name: values.last_name,
+      user_role_id: values.user_role_id,
+      user_type_id: values.user_type_id,
+    };
+
+    try {
+      const res = await fetch(endpoint, {
+        method,
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${session?.accessToken}`,
+        },
+        body: JSON.stringify(payload),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data?.detail || `HTTP ${res.status}`);
+
+      message.success(isEdit ? "User updated!" : "User created!");
+      setModalOpen(false);
+      setEditingId(null);
+      setEditDetail(null);
+      fetchData();
+    } catch (err) {
+      console.error(err);
+      message.error(err.message || "Failed to save user");
+    }
   };
 
-  const saveCreate = async () => {
+  /** Deletar */
+  const handleDelete = async (id) => {
     try {
-      const values = await createForm.validateFields();
-      const res = await fetch(API_USERS, {
-        method: "POST",
-        credentials: "include",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(values),
+      const res = await fetch(`${API_BASE}/api/users/${id}/`, {
+        method: "DELETE",
+        headers: { Authorization: `Bearer ${session?.accessToken}` },
       });
       if (!res.ok) {
-        const err = await res.json().catch(() => ({}));
-        throw new Error(err?.detail || "Failed to create");
+        const data = await res.json().catch(() => ({}));
+        throw new Error(data?.detail || `HTTP ${res.status}`);
       }
-      message.success("User created");
-      setCreateOpen(false);
-      createForm.resetFields();
-      mutate();
-    } catch (e) {
-      console.error(e);
-      message.error(e.message || "Error creating user");
+      message.success("User deleted!");
+      fetchData();
+    } catch (err) {
+      console.error(err);
+      message.error(err.message || "Failed to delete user");
     }
   };
 
+  /** Colunas para o shape achatado */
   const columns = [
-    { title: "ID", dataIndex: ["user", "id"], width: 70 },
-    { title: "Username", dataIndex: ["user", "username"] },
-    { title: "Name", render: (_, r) => `${r.user.first_name || ""} ${r.user.last_name || ""}`.trim() || "—" },
-    { title: "Email", dataIndex: ["user", "email"] },
+    { title: "ID", dataIndex: "id", key: "id", width: 80 },
+    {
+      title: "Username",
+      dataIndex: "username",
+      key: "username",
+      render: (v) => v || "—",
+    },
+    { title: "Email", dataIndex: "email", key: "email" },
+    {
+      title: "Active",
+      dataIndex: "is_active",
+      key: "is_active",
+      render: (v) => <Tag color={v ? "green" : "red"}>{v ? "Yes" : "No"}</Tag>,
+      width: 100,
+    },
+
+    // 👇 NOVAS COLUNAS: user_role / user_type (vindas da API /api/users/)
     {
       title: "Role",
-      render: (_, r) => r.profile?.user_role ? <Tag>{r.profile.user_role}</Tag> : <span>—</span>,
-      width: 120,
+      dataIndex: "user_role",
+      key: "user_role",
+      render: (v) => <Tag color="geekblue">{v || "—"}</Tag>,
     },
     {
       title: "Type",
-      render: (_, r) => r.profile?.user_type ? <Tag color="blue">{r.profile.user_type}</Tag> : <span>—</span>,
-      width: 120,
+      dataIndex: "user_type",
+      key: "user_type",
+      render: (v) => <Tag color="purple">{v || "—"}</Tag>,
+    },
+
+    // Planos (mantidos)
+    {
+      title: "Plan Coverage",
+      dataIndex: "insuranceCoverage",
+      key: "insuranceCoverage",
+      render: (v) => <Tag color="blue">{v || "—"}</Tag>,
     },
     {
-      title: "Active",
-      dataIndex: ["user", "is_active"],
-      width: 90,
-      render: (v) => (v ? <Tag color="green">Yes</Tag> : <Tag color="red">No</Tag>),
+      title: "Plan Type",
+      dataIndex: "coverageType",
+      key: "coverageType",
+      render: (v) => <Tag color="orange">{v || "—"}</Tag>,
     },
+
     {
       title: "Actions",
       key: "actions",
-      width: 220,
       render: (_, record) => (
         <Space>
-          <Button icon={<EditOutlined />} size="small" onClick={() => openEdit(record)}>
-            Edit
-          </Button>
+          <Button icon={<EditOutlined />} onClick={() => openEdit(record)} />
           <Popconfirm
-            title="Deactivate user?"
+            title="Delete this user?"
+            onConfirm={() => handleDelete(record.id)}
             okText="Yes"
             cancelText="No"
-            onConfirm={() => onDelete(record.user.id, false)}
           >
-            <Button icon={<DeleteOutlined />} danger size="small">
-              Deactivate
-            </Button>
-          </Popconfirm>
-          <Popconfirm
-            title="Delete permanently?"
-            okText="Delete"
-            okButtonProps={{ danger: true }}
-            cancelText="Cancel"
-            onConfirm={() => onDelete(record.user.id, true)}
-          >
-            <Button size="small">Hard Delete</Button>
+            <Button icon={<DeleteOutlined />} danger />
           </Popconfirm>
         </Space>
       ),
     },
   ];
 
-  return (
-    <div style={{ display: "grid", gap: 12 }}>
-      {/* Toolbar */}
-      <div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}>
-        <Input.Search
-          allowClear
-          placeholder="Search by username, email, name…"
-          onSearch={setQ}
-          style={{ maxWidth: 360 }}
-          enterButton
-        />
-        <Select
-          value={active}
-          onChange={setActive}
-          placeholder="Active?"
-          style={{ width: 140 }}
-          options={[
-            { label: "All", value: undefined },
-            { label: "Active", value: true },
-            { label: "Inactive", value: false },
-          ]}
-        />
-        <Button icon={<ReloadOutlined />} onClick={() => mutate()} />
-        <Button type="primary" icon={<PlusOutlined />} onClick={openCreate}>
-          New User
-        </Button>
-      </div>
+  if (status === "loading") return <div>Loading...</div>;
 
-      {/* Table */}
+  return (
+    <Card
+      title={
+        <Space style={{ width: "100%", justifyContent: "space-between" }}>
+          <span>User Management</span>
+          <Space>
+            <Input.Search
+              allowClear
+              placeholder="Search by username or email"
+              onSearch={setSearch}
+              style={{ width: 280 }}
+            />
+            <Button type="primary" icon={<PlusOutlined />} onClick={openCreate}>
+              Create
+            </Button>
+            <Button icon={<ReloadOutlined />} onClick={fetchData} />
+          </Space>
+        </Space>
+      }
+    >
       <Table
-        rowKey={(r) => r.user.id}
-        loading={isLoading}
+        size="small"
+        rowKey="id"
         dataSource={rows}
         columns={columns}
-        pagination={false}
+        loading={loading}
+        pagination={{ pageSize: 10, showSizeChanger: false }}
       />
 
-      {/* Edit Modal */}
-      <Modal
-        title={`Edit User #${editForm.getFieldValue("id") || ""}`}
-        open={editOpen}
-        onCancel={() => setEditOpen(false)}
-        onOk={saveEdit}
-        okText="Save"
-      >
-        <Form form={editForm} layout="vertical">
-          <Form.Item name="id" style={{ display: "none" }}>
-            <Input type="hidden" />
-          </Form.Item>
-
-          <Form.Item label="Username" name="username">
-            <Input />
-          </Form.Item>
-          <Form.Item label="Email" name="email" rules={[{ type: "email", message: "Invalid email" }]}>
-            <Input />
-          </Form.Item>
-          <Form.Item label="First name" name="first_name">
-            <Input />
-          </Form.Item>
-          <Form.Item label="Last name" name="last_name">
-            <Input />
-          </Form.Item>
-
-          <Form.Item label="Password (set new)" name="password">
-            <Input.Password placeholder="Leave blank to keep current" />
-          </Form.Item>
-
-          <Form.Item label="Active" name="is_active" valuePropName="checked">
-            <Switch />
-          </Form.Item>
-
-          <Form.Item label="Role" name="user_role_id">
-            <Select
-              placeholder="Select a role"
-              options={roleOptions}
-              allowClear
-              showSearch
-              optionFilterProp="label"
-            />
-          </Form.Item>
-
-          <Form.Item label="Type" name="user_type_id">
-            <Select
-              placeholder="Select a type"
-              options={typeOptions}
-              allowClear
-              showSearch
-              optionFilterProp="label"
-            />
-          </Form.Item>
-
-          <Form.Item label="Department" name="department">
-            <Input />
-          </Form.Item>
-          <Form.Item label="Job title" name="job_title">
-            <Input />
-          </Form.Item>
-          <Form.Item label="Location" name="location">
-            <Input />
-          </Form.Item>
-          <Form.Item label="Phone number" name="phone_number">
-            <Input />
-          </Form.Item>
-        </Form>
-      </Modal>
-
-      {/* Create Modal */}
-      <Modal
-        title="New User"
-        open={createOpen}
-        onCancel={() => setCreateOpen(false)}
-        onOk={saveCreate}
-        okText="Create"
-      >
-        <Form form={createForm} layout="vertical">
-          <Form.Item
-            label="Email"
-            name="email"
-            rules={[{ required: true, message: "Email is required" }, { type: "email", message: "Invalid email" }]}
-          >
-            <Input />
-          </Form.Item>
-          <Form.Item
-            label="Password"
-            name="password"
-            rules={[{ required: true, message: "Password is required" }]}
-          >
-            <Input.Password />
-          </Form.Item>
-          <Form.Item label="Username" name="username" tooltip="Defaults to email if empty">
-            <Input />
-          </Form.Item>
-          <Form.Item label="First name" name="first_name">
-            <Input />
-          </Form.Item>
-          <Form.Item label="Last name" name="last_name">
-            <Input />
-          </Form.Item>
-
-          <Form.Item label="Active" name="is_active" valuePropName="checked" initialValue={true}>
-            <Switch defaultChecked />
-          </Form.Item>
-
-          <Form.Item label="Role" name="user_role_id">
-            <Select
-              placeholder="Select a role"
-              options={roleOptions}
-              allowClear
-              showSearch
-              optionFilterProp="label"
-            />
-          </Form.Item>
-
-          <Form.Item label="Type" name="user_type_id">
-            <Select
-              placeholder="Select a type"
-              options={typeOptions}
-              allowClear
-              showSearch
-              optionFilterProp="label"
-            />
-          </Form.Item>
-
-          <Form.Item label="Department" name="department">
-            <Input />
-          </Form.Item>
-          <Form.Item label="Job title" name="job_title">
-            <Input />
-          </Form.Item>
-          <Form.Item label="Location" name="location">
-            <Input />
-          </Form.Item>
-          <Form.Item label="Phone number" name="phone_number">
-            <Input />
-          </Form.Item>
-        </Form>
-      </Modal>
-    </div>
+      <UserForm
+        open={modalOpen}
+        onCancel={() => {
+          setModalOpen(false);
+          setEditingId(null);
+          setEditDetail(null);
+        }}
+        onSave={handleSave}
+        initialData={editDetail}
+        isEdit={!!editingId}
+        roles={userRoles}
+        types={userTypes}
+      />
+    </Card>
   );
 }

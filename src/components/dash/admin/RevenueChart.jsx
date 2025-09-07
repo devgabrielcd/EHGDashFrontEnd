@@ -5,6 +5,7 @@ import { Card, Select, Space } from 'antd';
 import {
   ResponsiveContainer, LineChart, Line, XAxis, YAxis, Tooltip, CartesianGrid
 } from 'recharts';
+import { useSession } from 'next-auth/react';
 
 const API_BASE = process.env.NEXT_PUBLIC_BACKEND_BASE_URL ?? 'http://localhost:8000';
 
@@ -55,8 +56,10 @@ export default function RevenueChart({
   title = 'Clients Added',
   initialCompany = 'all',
   showCompanyFilter = true,
-  initialPeriod = '12', // '3' | '6' | '12' | '24' | 'ytd'
+  initialPeriod = '12',
 }) {
+  const { data: session, status } = useSession(); // 👈 precisamos do token
+
   const [companyOptions, setCompanyOptions] = useState([{ label: 'All', value: 'all' }]);
   const [companiesLoading, setCompaniesLoading] = useState(true);
   const [selectedCompany, setSelectedCompany] = useState(initialCompany);
@@ -65,7 +68,7 @@ export default function RevenueChart({
   const [rows, setRows] = useState([]);
   const [loading, setLoading] = useState(true);
 
-  // 1) Carregar empresas
+  // 1) Carregar empresas (público)
   useEffect(() => {
     let alive = true;
     (async () => {
@@ -93,34 +96,47 @@ export default function RevenueChart({
     return () => { alive = false; };
   }, [initialCompany]);
 
-  // 2) URL de dados
+  // 2) URL dos dados protegidos (users API)
   const url = useMemo(() => {
+    const base = new URL(`${API_BASE}/api/users/`);
     if (selectedCompany && selectedCompany !== 'all') {
-      return `${API_BASE}/sheets/sheet-data/?company=${encodeURIComponent(selectedCompany)}`;
+      base.searchParams.set('company', selectedCompany);
     }
-    return `${API_BASE}/sheets/sheet-data/`;
+    return base.toString();
   }, [selectedCompany]);
 
-  // 3) Fetch
+  // 3) Fetch protegido com Bearer
   useEffect(() => {
+    if (status !== 'authenticated' || !session?.accessToken) return; // evita 403
+
     let alive = true;
     (async () => {
       try {
         setLoading(true);
-        const res = await fetch(url, { cache: 'no-store' });
-        const json = res.ok ? await res.json() : [];
+        const res = await fetch(url, {
+          cache: 'no-store',
+          headers: {
+            Authorization: `Bearer ${session.accessToken}`, // 👈 AGORA VAI O TOKEN
+          },
+        });
         if (!alive) return;
+        const json = res.ok ? await res.json() : [];
+        if (!res.ok) {
+          // joga um erro mais claro no console
+          throw new Error(`HTTP ${res.status} ${res.statusText} — ${JSON.stringify(json)}`);
+        }
         setRows(Array.isArray(json) ? json : []);
       } catch (e) {
-        console.error('Erro ao buscar sheet-data:', e);
+        console.error('Erro ao buscar /api/users/:', e);
         if (!alive) return;
         setRows([]);
       } finally {
         if (alive) setLoading(false);
       }
     })();
+
     return () => { alive = false; };
-  }, [url]);
+  }, [url, session?.accessToken, status]);
 
   // 4) Agregação por período
   const series = useMemo(() => {
@@ -145,9 +161,11 @@ export default function RevenueChart({
     });
   }, [rows, period]);
 
-  // 5) Título dinâmico opcional
   const computedTitle =
     period === 'ytd' ? `${title} (YTD)` : `${title} (last ${period} months)`;
+
+  const disabled = status === 'unauthenticated';
+  const waitingSession = status === 'loading';
 
   return (
     <Card
@@ -160,6 +178,7 @@ export default function RevenueChart({
               onChange={setPeriod}
               options={PERIOD_OPTIONS}
               style={{ width: 150 }}
+              disabled={disabled || waitingSession}
             />
             {showCompanyFilter && (
               <Select
@@ -168,6 +187,7 @@ export default function RevenueChart({
                 options={companyOptions}
                 loading={companiesLoading}
                 style={{ width: 200 }}
+                disabled={disabled || waitingSession}
               />
             )}
           </Space>
@@ -175,7 +195,11 @@ export default function RevenueChart({
       }
     >
       <div style={{ height: 280 }} tabIndex={-1}>
-        {loading ? (
+        {disabled ? (
+          <div style={{ padding: 12 }}>Faça login para visualizar.</div>
+        ) : waitingSession ? (
+          <div style={{ padding: 12 }}>Carregando sessão…</div>
+        ) : loading ? (
           <div style={{ padding: 12 }}>Carregando gráfico...</div>
         ) : (
           <ResponsiveContainer width="100%" height="100%">

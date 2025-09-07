@@ -1,22 +1,18 @@
+// components/providers/DashboardProviders.jsx
 "use client";
 
 import React from "react";
 import "@ant-design/v5-patch-for-react-19";
 import "antd/dist/reset.css";
 import { ConfigProvider, theme as antdTheme, Spin } from "antd";
-import { ThemeProvider, useTheme } from "next-themes";
 import { Provider as ReduxProvider } from "react-redux";
 import { store } from "@/components/redux/store";
+import { useTheme } from "next-themes";
 
-/**
- * Esconde o app até a hidratação terminar → evita FOUC.
- */
 function HydrationGate({ children }) {
   const [mounted, setMounted] = React.useState(false);
   React.useEffect(() => setMounted(true), []);
-
   if (!mounted) {
-    // Tela de loading com o mesmo BG do layout
     return (
       <div
         style={{
@@ -33,11 +29,8 @@ function HydrationGate({ children }) {
   return children;
 }
 
-/**
- * Aplica tokens do AntD e CSS vars por tema.
- */
 function ThemedShell({ children }) {
-  const { resolvedTheme } = useTheme();
+  const { resolvedTheme } = useTheme();      // ← integra com next-themes
   const isDark = resolvedTheme === "dark";
 
   const ui = React.useMemo(
@@ -61,7 +54,7 @@ function ThemedShell({ children }) {
 
   return (
     <ConfigProvider theme={antdConfig}>
-      {/* CSS vars globais para manter consistência com o server */}
+      {/* CSS vars que o restante do app usa (Sidebar, etc) */}
       <style jsx global>{`
         :root {
           --bg-layout: ${ui.bgLayout};
@@ -76,12 +69,10 @@ function ThemedShell({ children }) {
 
 export default function DashboardProviders({ children }) {
   return (
-      <ReduxProvider store={store}>
-        <ThemeProvider attribute="class" defaultTheme="dark" enableSystem>
-          <HydrationGate>
-            <ThemedShell>{children}</ThemedShell>
-          </HydrationGate>
-        </ThemeProvider>
-      </ReduxProvider>
+    <ReduxProvider store={store}>
+      <HydrationGate>
+        <ThemedShell>{children}</ThemedShell>
+      </HydrationGate>
+    </ReduxProvider>
   );
 }
