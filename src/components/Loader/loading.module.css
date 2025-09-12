@@ -1,0 +1,14 @@
+/* src/components/Loading.module.css */
+.loadingContainer {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    background-color: rgba(255, 255, 255, 0.7); /* Background translúcido para indicar carregamento */
+    z-index: 9999; /* Garante que o spinner fique acima de outros elementos */
+  }
+  

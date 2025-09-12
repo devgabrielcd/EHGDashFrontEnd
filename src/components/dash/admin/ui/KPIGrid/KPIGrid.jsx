@@ -2,7 +2,7 @@
 
 import React from "react";
 import { Row, Col } from "antd";
-import KPIStat from "./KPIStat";
+import KPIStat from "../KPIStat";
 
 export default function KPIGrid({ items = [] }) {
   return (

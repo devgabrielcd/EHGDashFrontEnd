@@ -1,15 +1,15 @@
 "use client";
 
 import React from "react";
-import ProfileCard from "../dash/employee/cards/ProfileCard";
-import KPIGrid from "../dash/employee/cards/KPIGrid";
-import QuickActions from "../dash/employee/cards/QuickActions";
-import TasksCard from "../dash/employee/cards/TasksCard";
-import AnnouncementsCard from "../dash/employee/cards/AnnouncementsCard";
-import BenefitsCard from "../dash/employee/cards/BenefitsCard";
-import TrainingCard from "../dash/employee/cards/TrainingCard";
-import UpcomingEventsCard from "../dash/employee/cards/UpcomingEventsCard";
-import TimesheetCard from "../dash/employee/cards/TimesheetCard";
+import ProfileCard from "../../dash/employee/ui/cards/ProfileCard";
+import KPIGrid from "../../dash/employee/ui/cards/KPIGrid";
+import QuickActions from "../../dash/employee/ui/cards/QuickActions";
+import TasksCard from "../../dash/employee/ui/cards/TasksCard";
+import AnnouncementsCard from "../../dash/employee/ui/cards/AnnouncementsCard";
+import BenefitsCard from "../../dash/employee/ui/cards/BenefitsCard";
+import TrainingCard from "../../dash/employee/ui/cards/TrainingCard";
+import UpcomingEventsCard from "../../dash/employee/ui/cards/UpcomingEventsCard";
+import TimesheetCard from "../../dash/employee/ui/cards/TimesheetCard";
 
 /**
  * Props:

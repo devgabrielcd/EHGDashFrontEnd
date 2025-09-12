@@ -5,6 +5,7 @@ import DashboardProviders from "@/components/providers/DashboardProviders"; // C
 import SiderClient from "@/components/Sidebar/SiderClient";                 // CLIENT
 import Navbar from "@/components/navbar/Navbar";                          // CLIENT
 import AppFooter from "@/components/AppFooter/AppFooter";
+import Loader from "@/components/Loader/Loader";
 
 async function fetchSidebarItems(accessToken) {
   try {
@@ -32,6 +33,7 @@ export default async function DashboardLayout({ children }) {
   const initialSidebarItems = await fetchSidebarItems(session.accessToken);
 
   return (
+    <Loader>
     <DashboardProviders>
       {/* Contêiner raiz (server) */}
       <div style={{ minHeight: "100vh", background: "var(--bg-layout)" }}>
@@ -71,5 +73,6 @@ export default async function DashboardLayout({ children }) {
         </div>
       </div>
     </DashboardProviders>
+    </Loader>
   );
 }

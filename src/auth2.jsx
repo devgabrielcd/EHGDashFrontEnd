@@ -2,118 +2,63 @@ import NextAuth from "next-auth";
 import Credentials from "next-auth/providers/credentials";
 import axios from "axios";
 
-const API_BASE = process.env.NEXT_PUBLIC_DJANGO_API_URL || "http://localhost:8000";
-
-// ⏱️ janelas de tempo
-const ACCESS_LIFETIME_SECONDS = 5 * 60;          // access ~5 min
-const SESSION_MAX_AGE_SECONDS = 24 * 60 * 60;    // sessão expira após 24h SEM USO
-const UPDATE_AGE_SECONDS = 5 * 60;               // renova “carimbo” a cada 5 min de atividade
-const EXP_LEEWAY_SECONDS = 10;                   // leve folga pra evitar bater no limite
-
-// --- Mutex global para evitar corrida de refresh ---
-let refreshPromise = null;
-
-/**
- * Faz o refresh de forma serializada:
- * - Se já existe um refresh em andamento, aguarda o mesmo (evita 401 por rotação).
- * - Se o backend retornar refresh novo, substitui.
- */
-async function doRefreshOnce(currentRefreshToken) {
+async function refreshAccessToken(token) {
   try {
-    const resp = await axios.post(`${API_BASE}/auth/token/refresh/`, {
-      refresh: currentRefreshToken,
+    const response = await axios.post("http://localhost:8000/auth/token/refresh/", {
+      refresh: token.refreshToken,
     });
 
-    const newAccess = resp?.data?.access;
-    const newRefresh = resp?.data?.refresh; // com ROTATE_REFRESH_TOKENS pode vir
-
-    if (!newAccess) throw new Error("No access in refresh response");
-
     return {
-      accessToken: newAccess,
-      refreshToken: newRefresh || currentRefreshToken,
-      expires: Math.floor(Date.now() / 1000) + ACCESS_LIFETIME_SECONDS,
+      ...token,
+      accessToken: response.data.access,
+      expires: Math.floor(Date.now() / 1000) + 300, // 5 minutos
     };
-  } catch (err) {
-    // 401 aqui normalmente significa refresh já rotacionado/blacklist/expirado
-    return { accessToken: undefined, refreshToken: undefined, expires: 0, error: "RefreshAccessTokenError" };
-  }
-}
-
-async function refreshAccessToken(token) {
-  // Se já tem refresh em andamento, aguarda o mesmo
-  if (refreshPromise) {
-    const r = await refreshPromise;
-    return { ...token, ...r };
-  }
-
-  // Inicia um refresh "único"
-  refreshPromise = doRefreshOnce(token.refreshToken);
-  try {
-    const r = await refreshPromise;
-    return { ...token, ...r };
-  } finally {
-    refreshPromise = null;
+  } catch (error) {
+    return { ...token, error: "RefreshAccessTokenError" };
   }
 }
 
 export const { handlers, signIn, signOut, auth } = NextAuth({
+  secret: process.env.AUTH_SECRET,
   providers: [
     Credentials({
-      credentials: { username: {}, password: {} },
+      credentials: {
+        username: {},
+        password: {},
+      },
       authorize: async (credentials) => {
         try {
-          const authResponse = await axios.post(`${API_BASE}/auth/token/`, {
+          // Login inicial
+          const authResponse = await axios.post("http://localhost:8000/auth/token/", {
             username: credentials.username,
             password: credentials.password,
           });
 
-          const { access, refresh, id } = authResponse.data || {};
-          if (!access || !refresh) throw new Error("Invalid credentials");
-
-          return {
-            id,
-            accessToken: access,
-            refreshToken: refresh,
-            expires: Math.floor(Date.now() / 1000) + ACCESS_LIFETIME_SECONDS,
-            userDetailsFetched: false,
-          };
+          if (authResponse.data && authResponse.data.access && authResponse.data.refresh) {
+            return {
+              id: authResponse.data.id,
+              accessToken: authResponse.data.access,
+              refreshToken: authResponse.data.refresh,
+              expires: Math.floor(Date.now() / 1000) + 300,
+            };
+          } else {
+            throw new Error("Invalid credentials");
+          }
         } catch (error) {
-          const msg = error?.response?.data?.detail || "Authentication failed";
-          throw new Error(msg);
+          throw new Error(error.response?.data?.detail || "Authentication failed");
         }
       },
     }),
   ],
 
-  session: {
-    strategy: "jwt",
-    maxAge: SESSION_MAX_AGE_SECONDS,   // 24h sem uso
-    updateAge: UPDATE_AGE_SECONDS,     // renova a cada 5 min de atividade
-  },
-
-  jwt: {
-    maxAge: SESSION_MAX_AGE_SECONDS,
-  },
-
   callbacks: {
-    async jwt({ token, user, trigger, session }) {
-      // Login inicial
-      if (user) token = { ...token, ...user };
-
-      // Atualizações manuais preservando flags
-      if (trigger === "update" && session) {
-        token.userDetailsFetched = session.userDetailsFetched ?? token.userDetailsFetched;
+    async jwt({ token, user }) {
+      if (user) {
+        token = { ...token, ...user };
       }
 
-      // Se refresh anterior falhou, mantém erro para UI redirecionar
-      if (token.error === "RefreshAccessTokenError") return token;
-
-      const now = Math.floor(Date.now() / 1000);
-
-      // Só tenta refresh quando realmente estiver “quase” expirado (com leeway)
-      if (typeof token.expires === "number" && now >= (token.expires - EXP_LEEWAY_SECONDS)) {
-        return await refreshAccessToken(token);
+      if (Date.now() / 1000 >= token.expires - 1) {
+        return refreshAccessToken(token);
       }
 
       return token;
@@ -125,22 +70,23 @@ export const { handlers, signIn, signOut, auth } = NextAuth({
       session.refreshToken = token.refreshToken;
       session.error = token.error;
 
-      if (!token.userDetailsFetched && token.accessToken && !token.error && token.id != null) {
+      // Segunda requisição para buscar os detalhes do usuário
+      if (!session.user.details && token.accessToken) {
         try {
           const userDetailsResponse = await axios.get(
-            `${API_BASE}/api/detail-user/${token.id}/`,
-            { headers: { Authorization: `Bearer ${token.accessToken}` } }
+            `http://localhost:8000/api/detail-user/${token.id}/`,
+            {
+              headers: {
+                Authorization: `Bearer ${token.accessToken}`,
+              },
+            }
           );
-                console.log('Dados recebidos da API detail-user:', userDetailsResponse.data);
 
-          session.user.details = userDetailsResponse.data.user || {};
-          token.userDetailsFetched = true;
-        } catch {
-          session.user.details = {};
-          session.error = session.error ?? "Failed to fetch user details";
+          session.user.details = userDetailsResponse.data.user;
+        } catch (error) {
+          session.user.details = null;
+          session.error = "Failed to fetch user details";
         }
-      } else {
-        session.user.details = session.user.details ?? {};
       }
 
       return session;
@@ -149,5 +95,9 @@ export const { handlers, signIn, signOut, auth } = NextAuth({
     async redirect({ url, baseUrl }) {
       return url.startsWith(baseUrl) ? url : baseUrl;
     },
+  },
+
+  session: {
+    strategy: "jwt",
   },
 });

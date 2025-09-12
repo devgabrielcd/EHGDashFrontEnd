@@ -290,13 +290,13 @@ export default function UsersManagementPage() {
 
     // 👇 NOVAS COLUNAS: user_role / user_type (vindas da API /api/users/)
     {
-      title: "Role",
+      title: "Uer Role",
       dataIndex: "user_role",
       key: "user_role",
       render: (v) => <Tag color="geekblue">{v || "—"}</Tag>,
     },
     {
-      title: "Type",
+      title: "User Type",
       dataIndex: "user_type",
       key: "user_type",
       render: (v) => <Tag color="purple">{v || "—"}</Tag>,
