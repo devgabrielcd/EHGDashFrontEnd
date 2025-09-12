@@ -1,10 +1,14 @@
-import Reports from '@/components/pages/reports/page'
-import React from 'react'
+import { auth } from "@/auth";
+import { redirect } from "next/navigation";
+import ReportsPageServer from "@/components/pages/reports/ReportsPageServer";
 
-export default function page() {
+export default async function ReportsHub({ searchParams }) {
+  const session = await auth();
+  if (!session) return redirect("/");
+
   return (
     <main>
-        <Reports />
+      <ReportsPageServer searchParams={searchParams} />
     </main>
-  )
+  );
 }

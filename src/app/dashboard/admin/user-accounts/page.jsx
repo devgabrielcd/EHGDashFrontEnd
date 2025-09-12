@@ -1,160 +1,82 @@
-// src/app/dashboard/admin/user-accounts/page.jsx
 "use client";
 
-import React, { useEffect, useState, useCallback } from "react";
-import {
-  App,
-  Card,
-  Table,
-  Tag,
-  Space,
-  Input,
-  Button,
-  Popconfirm,
-  Modal,
-  Form,
-  Select,
-} from "antd";
-import {
-  ReloadOutlined,
-  EditOutlined,
-  DeleteOutlined,
-  PlusOutlined,
-} from "@ant-design/icons";
+import React, { useEffect, useState, useCallback, useMemo } from "react";
+import { App, Card, Table, Tag, Space } from "antd";
 import { useSession } from "next-auth/react";
+import { usePathname, useRouter, useSearchParams } from "next/navigation";
 
-const API_BASE =
-  process.env.NEXT_PUBLIC_BACKEND_BASE_URL ?? "http://localhost:8000";
+import UserToolbar from "@/components/dash/admin/user-accounts/UserToolbar";
+import UserForm from "@/components/dash/admin/user-accounts/UserForm";
 
-/** -------- Modal de Create/Edit -------- */
-const UserForm = ({
-  open,
-  onCancel,
-  onSave,
-  initialData, // { user: {...}, profile: {...} } (somente no Edit)
-  isEdit,
-  roles,
-  types,
-}) => {
-  const [form] = Form.useForm();
+const API_BASE = process.env.NEXT_PUBLIC_BACKEND_BASE_URL ?? "http://localhost:8000";
 
-  useEffect(() => {
-    if (!open) return;
-    if (initialData?.user) {
-      form.setFieldsValue({
-        username: initialData.user.username,
-        email: initialData.user.email,
-        first_name: initialData.user.first_name,
-        last_name: initialData.user.last_name,
-        user_role_id: initialData.profile?.user_role_id,
-        user_type_id: initialData.profile?.user_type_id,
-      });
-    } else {
-      form.resetFields();
-    }
-  }, [initialData, open, form]);
-
-  const handleSave = () => {
-    form
-      .validateFields()
-      .then((values) => onSave(values))
-      .catch(() => {});
-  };
-
-  return (
-    <Modal
-      open={open}
-      title={isEdit ? "Edit User" : "Create New User"}
-      okText={isEdit ? "Update" : "Create"}
-      onCancel={onCancel}
-      onOk={handleSave}
-    >
-      <Form form={form} layout="vertical" name="user_form">
-        <Form.Item
-          name="username"
-          label="Username"
-          rules={[{ required: true, message: "Please input the username!" }]}
-        >
-          <Input />
-        </Form.Item>
-
-        <Form.Item
-          name="email"
-          label="Email"
-          rules={[
-            { required: true, message: "Please input the email!" },
-            { type: "email" },
-          ]}
-        >
-          <Input />
-        </Form.Item>
-
-        <Form.Item
-          name="password"
-          label="Password"
-          rules={isEdit ? [] : [{ required: true, message: "Please input the password!" }]}
-        >
-          <Input.Password placeholder={isEdit ? "Leave blank to keep current password" : ""} />
-        </Form.Item>
-
-        <Form.Item name="first_name" label="First Name">
-          <Input />
-        </Form.Item>
-
-        <Form.Item name="last_name" label="Last Name">
-          <Input />
-        </Form.Item>
-
-        <Form.Item
-          name="user_role_id"
-          label="User Role"
-          rules={[{ required: true, message: "Please select a role!" }]}
-        >
-          <Select options={roles} />
-        </Form.Item>
-
-        <Form.Item
-          name="user_type_id"
-          label="User Type"
-          rules={[{ required: true, message: "Please select a type!" }]}
-        >
-          <Select options={types} />
-        </Form.Item>
-      </Form>
-    </Modal>
-  );
+/* ----------------- Helpers ----------------- */
+const clean = (v) => (v == null ? "" : String(v).trim());
+const ROLE_LIKE = new Set(["admin","employee","staff","customer","owner","manager","-"]);
+const sanitizePlanish = (raw) => {
+  const s = clean(raw);
+  if (!s || ROLE_LIKE.has(s.toLowerCase())) return "—";
+  return s;
 };
 
-/** -------- Página -------- */
+async function fetchJSON(url, token) {
+  const res = await fetch(url, { headers: { Authorization: `Bearer ${token}` }, cache: "no-store" });
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok) throw new Error(data?.detail || `HTTP ${res.status}`);
+  return data;
+}
+
+const deriveOptions = (users, field) => {
+  const set = new Set();
+  for (const u of users || []) {
+    const v = clean(u?.[field]);
+    if (v && !ROLE_LIKE.has(v.toLowerCase())) set.add(v);
+  }
+  return [...set].sort().map((v) => ({ label: v, value: v }));
+};
+
+/* ----------------- Page ----------------- */
 export default function UsersManagementPage() {
   const { message } = App.useApp();
   const { data: session, status } = useSession();
+  const searchParams = useSearchParams();
+  const router = useRouter();
+  const pathname = usePathname();
 
-  const [rows, setRows] = useState([]);            // lista achatada do /api/users/
+  // estados principais
+  const [rows, setRows] = useState([]);
   const [loading, setLoading] = useState(true);
-  const [search, setSearch] = useState("");
 
+  // toolbar / query params (persistentes)
+  const q = searchParams.get("q") || "";
+  const companyFilter = searchParams.get("company") || "";
+
+  // modal
   const [modalOpen, setModalOpen] = useState(false);
-  const [editDetail, setEditDetail] = useState(null); // detalhe {user, profile} para o Edit
-  const [editingId, setEditingId] = useState(null);   // id do usuário sendo editado
+  const [editDetail, setEditDetail] = useState(null);
+  const [editingId, setEditingId] = useState(null);
 
+  // combos
   const [userRoles, setUserRoles] = useState([]);
   const [userTypes, setUserTypes] = useState([]);
+  const [companyOptions, setCompanyOptions] = useState([]);
+  const [coverageOptions, setCoverageOptions] = useState([]);
+  const [planTypeOptions, setPlanTypeOptions] = useState([]);
 
-  /** Helpers de fetch com Bearer */
-  const fetchJSON = useCallback(
-    async (url) => {
-      const res = await fetch(url, {
-        headers: { Authorization: `Bearer ${session?.accessToken}` },
-      });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data?.detail || `HTTP ${res.status}`);
-      return data;
-    },
+  const authedFetch = useCallback(
+    (url) => fetchJSON(url, session?.accessToken),
     [session?.accessToken]
   );
 
-  /** Carrega lista achatada + selects */
+  const updateQuery = useCallback((patch) => {
+    const sp = new URLSearchParams(searchParams.toString());
+    Object.entries(patch).forEach(([k, v]) => {
+      if (v === "" || v == null) sp.delete(k);
+      else sp.set(k, String(v));
+    });
+    router.push(`${pathname}?${sp.toString()}`, { scroll: false });
+  }, [pathname, router, searchParams]);
+
   const fetchData = useCallback(async () => {
     if (status !== "authenticated" || !session?.accessToken) {
       if (status !== "loading") message.error("You need to be authenticated.");
@@ -165,17 +87,33 @@ export default function UsersManagementPage() {
       setLoading(true);
 
       const url = new URL(`${API_BASE}/api/users/`);
-      if (search) url.searchParams.set("q", search);
+      if (q) url.searchParams.set("q", q);
+      if (companyFilter) url.searchParams.set("company", companyFilter);
 
-      const [users, roles, types] = await Promise.all([
-        fetchJSON(url.toString()),                   // 👈 array achatado
-        fetchJSON(`${API_BASE}/api/roles/`),         // [{id, name}]
-        fetchJSON(`${API_BASE}/api/types/`),         // [{id, name}]
+      const [users, roles, types, companies] = await Promise.all([
+        authedFetch(url.toString()),
+        authedFetch(`${API_BASE}/api/roles/`),
+        authedFetch(`${API_BASE}/api/types/`),
+        fetch(`${API_BASE}/company/list/`, { cache: "no-store" }).then((r) => (r.ok ? r.json() : [])),
       ]);
 
-      setRows(Array.isArray(users) ? users : []);    // 👈 SEM .results
-      setUserRoles(roles.map((r) => ({ label: r.name, value: r.id })));
-      setUserTypes(types.map((t) => ({ label: t.name, value: t.id })));
+      const usersArr = Array.isArray(users) ? users : [];
+      setRows(usersArr);
+
+      setUserRoles(roles.map((r) => ({ label: r.name ?? r.user_role ?? String(r.id), value: r.id })));
+      setUserTypes(types.map((t) => ({ label: t.name ?? t.user_type ?? String(t.id), value: t.id })));
+
+      setCompanyOptions(
+        [{ label: "All companies", value: "" }].concat(
+          (companies || [])
+            .filter((c) => c?.id && c?.name)
+            .map((c) => ({ label: c.name, value: String(c.id) }))
+        )
+      );
+
+      // enquanto não há endpoints dedicados, derivamos das linhas
+      setCoverageOptions(deriveOptions(usersArr, "insuranceCoverage"));
+      setPlanTypeOptions(deriveOptions(usersArr, "coverageType"));
     } catch (err) {
       console.error(err);
       message.error(err.message || "Failed to load data");
@@ -183,25 +121,23 @@ export default function UsersManagementPage() {
     } finally {
       setLoading(false);
     }
-  }, [status, session?.accessToken, search, fetchJSON, message]);
+  }, [status, session?.accessToken, q, companyFilter, authedFetch, message]);
 
   useEffect(() => {
     if (status === "authenticated") fetchData();
   }, [status, fetchData]);
 
-  /** Abrir modal de criação */
   const openCreate = () => {
     setEditingId(null);
     setEditDetail(null);
     setModalOpen(true);
   };
 
-  /** Abrir modal de edição: busca detalhe no endpoint legado /api/detail-user/<id>/ */
+  // Edit usa o endpoint correto (ID de USER)
   const openEdit = async (flatRow) => {
     try {
-      setEditingId(flatRow.id); // id vem do shape achatado
-      const detail = await fetchJSON(`${API_BASE}/api/detail-user/${flatRow.id}/`);
-      // detail = { user: {...}, profile: {...} } com user_role_id/user_type_id
+      setEditingId(flatRow.id);
+      const detail = await authedFetch(`${API_BASE}/api/users/${flatRow.id}/`);
       setEditDetail(detail);
       setModalOpen(true);
     } catch (err) {
@@ -210,22 +146,23 @@ export default function UsersManagementPage() {
     }
   };
 
-  /** Criar/Atualizar */
   const handleSave = async (values) => {
     const isEdit = !!editingId;
-    const endpoint = isEdit
-      ? `${API_BASE}/api/users/${editingId}/`
-      : `${API_BASE}/api/users/`;
+    const endpoint = isEdit ? `${API_BASE}/api/users/${editingId}/` : `${API_BASE}/api/users/`;
     const method = isEdit ? "PATCH" : "POST";
 
     const payload = {
       username: values.username,
       email: values.email,
-      password: values.password,          // pode ser undefined no edit (servidor ignora)
+      password: values.password, // undefined no edit -> backend ignora
       first_name: values.first_name,
       last_name: values.last_name,
       user_role_id: values.user_role_id,
       user_type_id: values.user_type_id,
+      // ESSENCIAIS para salvar no Profile (backend já aceita):
+      company_id: values.company_id || null,
+      insuranceCoverage: values.insuranceCoverage || null,
+      coverageType: values.coverageType || null,
     };
 
     try {
@@ -237,7 +174,7 @@ export default function UsersManagementPage() {
         },
         body: JSON.stringify(payload),
       });
-      const data = await res.json();
+      const data = await res.json().catch(() => ({}));
       if (!res.ok) throw new Error(data?.detail || `HTTP ${res.status}`);
 
       message.success(isEdit ? "User updated!" : "User created!");
@@ -251,7 +188,6 @@ export default function UsersManagementPage() {
     }
   };
 
-  /** Deletar */
   const handleDelete = async (id) => {
     try {
       const res = await fetch(`${API_BASE}/api/users/${id}/`, {
@@ -270,15 +206,9 @@ export default function UsersManagementPage() {
     }
   };
 
-  /** Colunas para o shape achatado */
-  const columns = [
+  const columns = useMemo(() => ([
     { title: "ID", dataIndex: "id", key: "id", width: 80 },
-    {
-      title: "Username",
-      dataIndex: "username",
-      key: "username",
-      render: (v) => v || "—",
-    },
+    { title: "Username", dataIndex: "username", key: "username", render: (v) => v || "—" },
     { title: "Email", dataIndex: "email", key: "email" },
     {
       title: "Active",
@@ -287,74 +217,45 @@ export default function UsersManagementPage() {
       render: (v) => <Tag color={v ? "green" : "red"}>{v ? "Yes" : "No"}</Tag>,
       width: 100,
     },
+    { title: "User Role", dataIndex: "user_role", key: "user_role", render: (v) => <Tag color="geekblue">{v || "—"}</Tag> },
+    { title: "User Type", dataIndex: "user_type", key: "user_type", render: (v) => <Tag color="purple">{v || "—"}</Tag> },
 
-    // 👇 NOVAS COLUNAS: user_role / user_type (vindas da API /api/users/)
+    // NOVA COLUNA Company
     {
-      title: "Uer Role",
-      dataIndex: "user_role",
-      key: "user_role",
-      render: (v) => <Tag color="geekblue">{v || "—"}</Tag>,
-    },
-    {
-      title: "User Type",
-      dataIndex: "user_type",
-      key: "user_type",
-      render: (v) => <Tag color="purple">{v || "—"}</Tag>,
+      title: "Company",
+      dataIndex: "company_name",
+      key: "company_name",
+      render: (v) => v || "—",
+      sorter: (a, b) => (a.company_name || "").localeCompare(b.company_name || ""),
     },
 
-    // Planos (mantidos)
-    {
-      title: "Plan Coverage",
-      dataIndex: "insuranceCoverage",
-      key: "insuranceCoverage",
-      render: (v) => <Tag color="blue">{v || "—"}</Tag>,
-    },
-    {
-      title: "Plan Type",
-      dataIndex: "coverageType",
-      key: "coverageType",
-      render: (v) => <Tag color="orange">{v || "—"}</Tag>,
-    },
+    { title: "Plan Coverage", dataIndex: "insuranceCoverage", key: "insuranceCoverage", render: (v) => <Tag color="blue">{sanitizePlanish(v)}</Tag> },
+    { title: "Plan Type", dataIndex: "coverageType", key: "coverageType", render: (v) => <Tag color="orange">{sanitizePlanish(v)}</Tag> },
 
     {
       title: "Actions",
       key: "actions",
       render: (_, record) => (
         <Space>
-          <Button icon={<EditOutlined />} onClick={() => openEdit(record)} />
-          <Popconfirm
-            title="Delete this user?"
-            onConfirm={() => handleDelete(record.id)}
-            okText="Yes"
-            cancelText="No"
-          >
-            <Button icon={<DeleteOutlined />} danger />
-          </Popconfirm>
+          <UserToolbar.EditButton onClick={() => openEdit(record)} />
+          <UserToolbar.DeleteButton onConfirm={() => handleDelete(record.id)} />
         </Space>
       ),
     },
-  ];
-
-  if (status === "loading") return <div>Loading...</div>;
+  ]), [openEdit]);
 
   return (
     <Card
       title={
-        <Space style={{ width: "100%", justifyContent: "space-between" }}>
-          <span>User Management</span>
-          <Space>
-            <Input.Search
-              allowClear
-              placeholder="Search by username or email"
-              onSearch={setSearch}
-              style={{ width: 280 }}
-            />
-            <Button type="primary" icon={<PlusOutlined />} onClick={openCreate}>
-              Create
-            </Button>
-            <Button icon={<ReloadOutlined />} onClick={fetchData} />
-          </Space>
-        </Space>
+        <UserToolbar
+          searchValue={q}
+          onSearch={(val) => updateQuery({ q: val })}
+          companyValue={companyFilter}
+          companyOptions={companyOptions}
+          onChangeCompany={(val) => updateQuery({ company: val })}
+          onCreate={openCreate}
+          onReload={fetchData}
+        />
       }
     >
       <Table
@@ -378,6 +279,9 @@ export default function UsersManagementPage() {
         isEdit={!!editingId}
         roles={userRoles}
         types={userTypes}
+        companyOptions={companyOptions}
+        coverageOptions={coverageOptions}
+        planTypeOptions={planTypeOptions}
       />
     </Card>
   );
