@@ -1,9 +1,9 @@
-// src/components/dash/admin/ui/RecentActivity/RecentActivityServer.jsx
-// SERVER
+// NADA de "use client" aqui – ESTE é Server Component
 import { auth } from "@/auth";
 import RecentActivity from "./RecentActivity";
 
-const API_BASE = process.env.NEXT_PUBLIC_BACKEND_BASE_URL ?? "http://localhost:8000";
+const API_BASE =
+  process.env.NEXT_PUBLIC_BACKEND_BASE_URL ?? "http://localhost:8000";
 
 async function fetchRecentEntities(token, company = "all", limit = 12) {
   const url = new URL(`${API_BASE}/api/top_entities/`);
@@ -18,7 +18,7 @@ async function fetchRecentEntities(token, company = "all", limit = 12) {
   if (!res.ok) return [];
   const data = await res.json();
 
-  // top_entities já vem ordenado por -date_joined, mas garantimos:
+  // Garante ordenação por data
   return [...data].sort(
     (a, b) => new Date(b?.datetime ?? 0) - new Date(a?.datetime ?? 0)
   );
@@ -48,7 +48,7 @@ export default async function RecentActivityServer({
   company = "all",
   limit = 12,
   title = "Recent Activities",
-  height = 220, // altura do scroll
+  height = 220, // altura da área scroll
 }) {
   const session = await auth();
   if (!session?.accessToken) {
@@ -58,19 +58,18 @@ export default async function RecentActivityServer({
   const rows = await fetchRecentEntities(session.accessToken, company, limit);
 
   const items = rows.map((u) => {
-    // API /api/top_entities/ retorna: id, username, firstName, lastName, email,
-    // company_name, insuranceCoverage, coverageType, datetime
     const first = u?.firstName ?? u?.firstname ?? "";
     const last = u?.lastName ?? u?.lastname ?? "";
     const name = [first, last].filter(Boolean).join(" ").trim() || "New User";
 
     const companyName = u?.company_name ?? "—";
-    const role = u?.user_role || "user"; // /top_entities pode não trazer user_role
+    // /api/top_entities/ pode não ter user_role – tratamos como "user"
+    const role = (u?.user_role || "user").toString();
     const coverage = u?.insuranceCoverage ?? null;
     const coverageType = u?.coverageType ?? null;
 
     const parts = [
-      `New ${role}`.replace(/\s+/g, " ").trim(),          // "New user" se role ausente
+      `New ${role}`.replace(/\s+/g, " ").trim(),
       name !== "New User" ? `(${name})` : null,
       companyName !== "—" ? `— ${companyName}` : null,
       coverage ? `• ${coverage}` : null,

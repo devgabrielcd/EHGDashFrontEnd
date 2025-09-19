@@ -1,44 +1,47 @@
-// components/dash/DashRole/dashadmin/DashAdmin.jsx
+// src/components/DashRole/dashadmin/DashAdmin.jsx
 import React from "react";
-import { Space, Row, Col } from "antd";
+import { Row, Col, Space } from "antd";
 import { auth } from "@/auth";
 
 import AdminHeader from "@/components/dash/admin/ui/AdminHeader/AdminHeader";
 import KPIGrid from "@/components/dash/admin/ui/KPIGrid/KPIGrid";
 import QuickLinks from "@/components/dash/admin/ui/QuickLinks/QuickLinks";
-import RecentActivity from "@/components/dash/admin/ui/RecentActivity/RecentActivity";
 import TopEntitiesServer from "@/components/dash/admin/ui/TopEntities/TopEntitiesServer";
-import RevenueChartServer from "@/components/dash/admin/ui/RevenueCharts/RevenueChartServer.jsx";
+import RevenueChartServer from "@/components/dash/admin/ui/RevenueCharts/RevenueChartServer";
+import RecentActivityServer from "@/components/dash/admin/ui/RecentActivity/RecentActivityServer";
 import SystemHealth from "@/components/dash/admin/ui/SystemHealth/SystemHealth";
 
 import styles from "./dash-admin.module.css";
 
-const API_BASE = process.env.NEXT_PUBLIC_BACKEND_BASE_URL ?? "http://localhost:8000";
+const API_BASE =
+  process.env.NEXT_PUBLIC_BACKEND_BASE_URL ?? "http://localhost:8000";
 
 async function fetchJSON(url, init) {
   const res = await fetch(url, init);
   if (!res.ok) {
-    // evita quebrar a page; retorna defaults
-    return null;
+    const txt = await res.text().catch(() => "");
+    throw new Error(`HTTP ${res.status} - ${txt || res.statusText}`);
   }
-  try {
-    return await res.json();
-  } catch {
-    return null;
-  }
+  return res.json();
 }
 
 export default async function DashAdmin({
   sysCompany = "all",
-  sysView = "insurance",
+  sysView = "insurance", // "insurance" | "planTypes" | "formTypes"
   revPeriod = 12,
   teCompany = "all",
-  kpiCompany = "all",
-  revCompany = "all",
-}) {
+  kpiCompany = "all",   // filtro opcional pros KPIs
+  revCompany = "all",   // ⬅️ receber da page e repassar ao gráfico
+} = {}) {
   const session = await auth();
 
-  // ---------- KPIs ----------
+  // ---- KPIs: /api/user-stats/ ----
+  const kpiQs = new URLSearchParams();
+  if (kpiCompany && kpiCompany !== "all") {
+    kpiQs.set("company", String(kpiCompany));
+  }
+  const kpiUrl = `${API_BASE}/api/user-stats/${kpiQs.toString() ? `?${kpiQs}` : ""}`;
+
   let stats = {
     total_users: 0,
     h4h_users: 0,
@@ -46,26 +49,48 @@ export default async function DashAdmin({
     by_company: [],
   };
 
-  if (session?.accessToken) {
-    const kpiQs = new URLSearchParams();
-    if (kpiCompany && kpiCompany !== "all") kpiQs.set("company", String(kpiCompany));
-
-    const kpiUrl = `${API_BASE}/api/user-stats/${kpiQs.toString() ? `?${kpiQs}` : ""}`;
-    const payload = await fetchJSON(kpiUrl, {
+  try {
+    stats = await fetchJSON(kpiUrl, {
       cache: "no-store",
-      headers: { Authorization: `Bearer ${session.accessToken}` },
+      headers: session?.accessToken
+        ? { Authorization: `Bearer ${session.accessToken}` }
+        : undefined,
     });
-    if (payload) stats = payload;
+  } catch (e) {
+    console.error("Falha ao carregar KPIs:", e?.message);
   }
 
   const kpis = [
-    { key: "total_users", title: "Total Users", value: stats.total_users ?? 0, icon: "user", color: "#1890ff" },
-    { key: "h4h_users",   title: "H4H Users",   value: stats.h4h_users ?? 0,   icon: "team", color: "#fa8c16" },
-    { key: "qol_users",   title: "QoL Users",   value: stats.qol_users ?? 0,   icon: "team", color: "#722ed1" },
-    { key: "reports",     title: "Reports",     value: 122,                    icon: "file", color: "#52c41a" },
+    {
+      key: "total_users",
+      title: "Total Users",
+      value: stats?.total_users ?? 0,
+      icon: "user",
+      color: "#1890ff",
+    },
+    {
+      key: "h4h_users",
+      title: "H4H Users",
+      value: stats?.h4h_users ?? 0,
+      icon: "team",
+      color: "#fa8c16",
+    },
+    {
+      key: "qol_users",
+      title: "QoL Users",
+      value: stats?.qol_users ?? 0,
+      icon: "team",
+      color: "#722ed1",
+    },
+    {
+      key: "reports",
+      title: "Reports",
+      value: 122, // placeholder até ligar fonte real
+      icon: "file",
+      color: "#52c41a",
+    },
   ];
 
-  // ---------- Atividade/Links dummy (igual aos seus) ----------
   const activity = [
     { time: "Today 10:24", text: "Backup completed", color: "green" },
     { time: "Yesterday 17:03", text: "Deploy v1.4.2 to production", color: "blue" },
@@ -88,25 +113,28 @@ export default async function DashAdmin({
 
         <Row gutter={[16, 16]}>
           <Col xs={24} lg={15}>
-            {/* Agora busca /api/revenue_series/ e respeita revCompany */}
-            <RevenueChartServer title="Clients Added" months={revPeriod} company={revCompany} />
+            {/* ⬇️ agora o gráfico respeita o filtro por company */}
+            <RevenueChartServer
+              title="Clients Added"
+              months={revPeriod}
+              company={revCompany}
+            />
           </Col>
           <Col xs={24} lg={9}>
-            {/* Usa /api/users_product_mix/ com filtros via URL */}
             <SystemHealth company={sysCompany} view={sysView} />
           </Col>
         </Row>
 
         <Row gutter={[16, 16]}>
           <Col xs={24} lg={15}>
-            <RecentActivity items={activity} />
+            {/* sua lista estática enquanto conecta RecentActivityServer */}
+            <RecentActivityServer title="Recent Activities" company="all" limit={12} height={220} />
           </Col>
           <Col xs={24} lg={9}>
             <QuickLinks items={links} />
           </Col>
         </Row>
 
-        {/* Usa /api/top_entities/?company=... */}
         <TopEntitiesServer company={teCompany} />
       </Space>
     </div>

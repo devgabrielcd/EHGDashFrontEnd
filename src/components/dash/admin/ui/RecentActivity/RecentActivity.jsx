@@ -9,11 +9,14 @@ const { Text } = Typography;
  * Props:
  * - title?: string
  * - items?: Array<{ time: string; text: string; color?: string }>
- * - height?: number | string  // altura da área scrollável (ex.: 220, "240px")
+ * - height?: number | string
  */
-export default function RecentActivity({ items = [], title = "Recent Activities", height = 220 }) {
+export default function RecentActivity({
+  items = [],
+  title = "Recent Activities",
+  height = 220,
+}) {
   const containerStyle = {
-    // aceita number (px) ou string (ex.: "240px")
     maxHeight: typeof height === "number" ? `${height}px` : height,
     overflowY: "auto",
     paddingRight: 8,
