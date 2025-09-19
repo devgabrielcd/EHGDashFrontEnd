@@ -1,7 +1,7 @@
 // Server Component
 import { auth } from "@/auth";
-import { Card, Space, Divider, Progress, Empty } from "antd";
-import Filters from "./SystemHealthFiltersClient"; // <<< client wrapper só dos filtros
+import { Card, Divider, Progress, Empty } from "antd";
+import SystemHealthFilters from "./SystemHealthFilters";
 
 const API_BASE =
   process.env.NEXT_PUBLIC_BACKEND_BASE_URL ?? "http://localhost:8000";
@@ -10,23 +10,10 @@ function percent(part, total) {
   if (!total) return 0;
   return Math.round((part / total) * 100);
 }
-function counterMap(rows, field) {
-  const map = new Map();
-  for (const r of rows) {
-    const key = r?.[field] ?? "Unknown";
-    map.set(key, (map.get(key) ?? 0) + 1);
-  }
-  return map;
-}
-function toSortedArray(map) {
-  return [...map.entries()]
-    .map(([name, count]) => ({ name, count }))
-    .sort((a, b) => b.count - a.count);
-}
 
 export default async function SystemHealth({
-  company = "all",
-  view = "insurance",
+  company = "all",        // lido da URL (?company=...)
+  view = "insurance",     // lido da URL (?view=insurance|planTypes|formTypes)
 }) {
   const session = await auth();
   if (!session?.accessToken) {
@@ -37,7 +24,7 @@ export default async function SystemHealth({
     );
   }
 
-  // Empresas (público)
+  // 1) Empresas (público)
   const companiesRes = await fetch(`${API_BASE}/company/list/`, {
     cache: "no-store",
   });
@@ -49,21 +36,41 @@ export default async function SystemHealth({
       .map((c) => ({ label: c.name, value: String(c.id) })),
   ];
 
-  // Dados protegidos
-  const base = new URL(`${API_BASE}/api/users/`);
-  if (company !== "all") base.searchParams.set("company", company);
+  // 2) Dados protegidos (seu endpoint novo do backend)
+  const qs = new URLSearchParams();
+  if (company && company !== "all") qs.set("company", company);
+  const url = `${API_BASE}/api/users_product_mix/${qs.toString() ? `?${qs}` : ""}`;
 
-  const res = await fetch(base.toString(), {
+  const res = await fetch(url, {
     cache: "no-store",
     headers: { Authorization: `Bearer ${session.accessToken}` },
   });
-  const rows = res.ok ? await res.json() : [];
 
-  const total = rows.length;
-  const byInsurance = toSortedArray(counterMap(rows, "insuranceCoverage"));
-  const byCoverageType = toSortedArray(counterMap(rows, "coverageType"));
-  const byFormType = toSortedArray(counterMap(rows, "formType")); // pode vir vazio
+  const json = res.ok ? await res.json() : { by_insurance: [], by_plan: [] };
+  const byInsurance = Array.isArray(json.by_insurance) ? json.by_insurance : [];
+  const byPlan = Array.isArray(json.by_plan) ? json.by_plan : [];
 
+  // 3) Monta a seção ativa
+  const section =
+    view === "planTypes"
+      ? {
+          title: "Plan Types",
+          rows: byPlan.map((i) => ({
+            name: i.coverageType || "Unknown",
+            count: i.total || 0,
+          })),
+        }
+      : view === "formTypes"
+      ? { title: "Form Types", rows: [] } // (ainda não implementado no backend)
+      : {
+          title: "Top Insurance Lines",
+          rows: byInsurance.map((i) => ({
+            name: i.insuranceCoverage || "Unknown",
+            count: i.total || 0,
+          })),
+        };
+
+  const total = section.rows.reduce((acc, r) => acc + (r.count || 0), 0);
   const palette = [
     "#1677ff",
     "#52c41a",
@@ -74,21 +81,17 @@ export default async function SystemHealth({
     "#a0d911",
   ];
 
-  const section =
-    view === "planTypes"
-      ? { title: "Plan Types", data: byCoverageType }
-      : view === "formTypes"
-      ? { title: "Form Types", data: byFormType }
-      : { title: "Top Insurance Lines", data: byInsurance };
-
   return (
     <Card
       title="Product Mix"
+      // >>> barra de filtros AGORA clicável (client)
       extra={
-        <Filters
+        <SystemHealthFilters
+          companyOptions={companyOptions}
           company={company}
           view={view}
-          companyOptions={companyOptions}
+          companyKey="company"
+          viewKey="view"
         />
       }
     >
@@ -97,32 +100,33 @@ export default async function SystemHealth({
       </Divider>
 
       <div style={{ maxHeight: 240, overflowY: "auto", paddingRight: 8 }}>
-        {section.data.length ? (
-          <Space direction="vertical" style={{ width: "100%" }}>
-            {section.data.map((item, idx) => (
-              <div key={`${view}-${item.name}`}>
-                <div
-                  style={{
-                    display: "flex",
-                    justifyContent: "space-between",
-                    marginBottom: 4,
-                  }}
-                >
-                  <span>{item.name}</span>
-                  <span>
-                    {item.count} ({percent(item.count, total)}%)
-                  </span>
-                </div>
-                <Progress
-                  percent={percent(item.count, total)}
-                  showInfo={false}
-                  strokeColor={palette[idx % palette.length]}
-                />
+        {section.rows.length ? (
+          section.rows.map((item, idx) => (
+            <div key={`${view}-${item.name}-${idx}`} style={{ marginBottom: 10 }}>
+              <div
+                style={{
+                  display: "flex",
+                  justifyContent: "space-between",
+                  marginBottom: 4,
+                }}
+              >
+                <span>{item.name}</span>
+                <span>
+                  {item.count} ({percent(item.count, total)}%)
+                </span>
               </div>
-            ))}
-          </Space>
+              <Progress
+                percent={percent(item.count, total)}
+                showInfo={false}
+                strokeColor={palette[idx % palette.length]}
+              />
+            </div>
+          ))
         ) : (
-          <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description="Sem dados" />
+          <Empty
+            image={Empty.PRESENTED_IMAGE_SIMPLE}
+            description="Sem dados"
+          />
         )}
       </div>
     </Card>
