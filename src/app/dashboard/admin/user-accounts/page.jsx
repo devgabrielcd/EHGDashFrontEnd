@@ -35,6 +35,18 @@ const deriveOptions = (users, field) => {
   return [...set].sort().map((v) => ({ label: v, value: v }));
 };
 
+// opções fixas, iguais ao backend (forms)
+const FORM_TYPE_OPTIONS = [
+  { label: "Homepage Form", value: "homepage" },
+  { label: "Referral Friend Form", value: "referral" },
+  { label: "Appointment Form", value: "appointment" },
+];
+const FORM_TYPE_LABEL = {
+  homepage: "Homepage Form",
+  referral: "Referral Friend Form",
+  appointment: "Appointment Form",
+};
+
 /* ----------------- Page ----------------- */
 export default function UsersManagementPage() {
   const { message } = App.useApp();
@@ -166,6 +178,7 @@ export default function UsersManagementPage() {
     };
 
     try {
+      // 1) salva/edita o usuário
       const res = await fetch(endpoint, {
         method,
         headers: {
@@ -176,6 +189,31 @@ export default function UsersManagementPage() {
       });
       const data = await res.json().catch(() => ({}));
       if (!res.ok) throw new Error(data?.detail || `HTTP ${res.status}`);
+
+      // 2) se o usuário escolheu um Form Type, registramos no app "forms"
+      const savedUserId = isEdit ? editingId : data?.id;
+      if (values.formType && savedUserId) {
+        const formsPayload = {
+          formType: values.formType,
+          user_id: savedUserId,
+          company_id: payload.company_id || null,
+          email: values.email || null,
+          first_name: values.first_name || null,
+          last_name: values.last_name || null,
+        };
+        const resForm = await fetch(`${API_BASE}/api/forms/`, {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${session?.accessToken}`,
+          },
+          body: JSON.stringify(formsPayload),
+        });
+        if (!resForm.ok) {
+          const errJ = await resForm.json().catch(() => ({}));
+          console.warn("Form submission failed:", errJ?.detail || resForm.status);
+        }
+      }
 
       message.success(isEdit ? "User updated!" : "User created!");
       setModalOpen(false);
@@ -220,7 +258,7 @@ export default function UsersManagementPage() {
     { title: "User Role", dataIndex: "user_role", key: "user_role", render: (v) => <Tag color="geekblue">{v || "—"}</Tag> },
     { title: "User Type", dataIndex: "user_type", key: "user_type", render: (v) => <Tag color="purple">{v || "—"}</Tag> },
 
-    // NOVA COLUNA Company
+    // Company
     {
       title: "Company",
       dataIndex: "company_name",
@@ -231,6 +269,19 @@ export default function UsersManagementPage() {
 
     { title: "Plan Coverage", dataIndex: "insuranceCoverage", key: "insuranceCoverage", render: (v) => <Tag color="blue">{sanitizePlanish(v)}</Tag> },
     { title: "Plan Type", dataIndex: "coverageType", key: "coverageType", render: (v) => <Tag color="orange">{sanitizePlanish(v)}</Tag> },
+
+    // ✅ NOVA COLUNA: Form Type (se o backend enviar `formType` nas linhas)
+    {
+      title: "Form Type",
+      dataIndex: "formType",
+      key: "formType",
+      render: (v) => {
+        const label = FORM_TYPE_LABEL[v] || sanitizePlanish(v);
+        return <Tag color="magenta">{label}</Tag>;
+      },
+      sorter: (a, b) => (FORM_TYPE_LABEL[a.formType] || a.formType || "")
+        .localeCompare(FORM_TYPE_LABEL[b.formType] || b.formType || ""),
+    },
 
     {
       title: "Actions",
@@ -282,6 +333,7 @@ export default function UsersManagementPage() {
         companyOptions={companyOptions}
         coverageOptions={coverageOptions}
         planTypeOptions={planTypeOptions}
+        formTypeOptions={FORM_TYPE_OPTIONS}
       />
     </Card>
   );

@@ -1,81 +1,73 @@
-"use client";
+'use client';
+import React, { useEffect, useState } from 'react';
+import { Switch, Space } from 'antd';
 
-import React, { useMemo, useState } from "react";
-import { Card, Space, Typography, Switch, Form, Select, Button, message } from "antd";
-import { BellOutlined } from "@ant-design/icons";
-import SectionTitle from "./SectionTitle";
-import { callAPI } from "./api";
+export default function NotificationsCard({ userId }) {
+  const [notif, setNotif] = useState({ email: true, push: false });
+  const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
+  const [status, setStatus] = useState('');
+  const API_BASE = (process.env.NEXT_PUBLIC_API_BASE_URL || 'http://localhost:8000').replace(/\/+$/, '');
 
-const { Text } = Typography;
+  useEffect(() => {
+    let alive = true;
+    (async () => {
+      try {
+        const res = await fetch(`${API_BASE}/api/users/${userId}/preferences/`, {
+          credentials: 'include',
+          headers: { Accept: 'application/json' },
+        });
+        const data = await res.json();
+        if (!alive) return;
+        setNotif(data?.notifications || { email: true, push: false });
+      } catch {
+        setStatus('Erro ao carregar preferências.');
+      } finally {
+        alive && setLoading(false);
+      }
+    })();
+    return () => { alive = false; };
+  }, [userId, API_BASE]);
 
-export default function NotificationsCard() {
-  const [loading, setLoading] = useState(false);
-  const [prefs, setPrefs] = useState({
-    email: true,
-    push: false,
-    inapp: true,
-    digest: "daily",
-  });
-
-  const cardStyle = useMemo(
-    () => ({ background: "var(--bg-panel)", borderColor: "var(--border-strong)" }),
-    []
-  );
-
-  const save = async () => {
+  const toggle = async (key, value) => {
+    const next = { ...notif, [key]: value };
+    setNotif(next);
+    setSaving(true);
+    setStatus('');
     try {
-      setLoading(true);
-      await callAPI("/api/notifications/prefs/", prefs);
-      message.success("Notification preferences saved!");
+      const res = await fetch(`${API_BASE}/api/users/${userId}/preferences/`, {
+        method: 'PATCH',
+        credentials: 'include',
+        headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
+        body: JSON.stringify({ notifications: next }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) setStatus(data?.detail || 'Erro ao salvar notificações.');
     } catch {
-      message.error("Could not save notification preferences.");
+      setStatus('Erro ao salvar notificações.');
     } finally {
-      setLoading(false);
+      setSaving(false);
     }
   };
 
   return (
-    <Card title={<SectionTitle icon={<BellOutlined />}>Notifications</SectionTitle>} style={cardStyle}>
-      <Space direction="vertical" size={12} style={{ width: "100%" }}>
-        <Space style={{ justifyContent: "space-between", width: "100%" }}>
-          <Text>Email alerts</Text>
-          <Switch
-            checked={prefs.email}
-            onChange={(v) => setPrefs((s) => ({ ...s, email: v }))}
-          />
-        </Space>
-        <Space style={{ justifyContent: "space-between", width: "100%" }}>
-          <Text>Push notifications</Text>
-          <Switch
-            checked={prefs.push}
-            onChange={(v) => setPrefs((s) => ({ ...s, push: v }))}
-          />
-        </Space>
-        <Space style={{ justifyContent: "space-between", width: "100%" }}>
-          <Text>In-app messages</Text>
-          <Switch
-            checked={prefs.inapp}
-            onChange={(v) => setPrefs((s) => ({ ...s, inapp: v }))}
-          />
-        </Space>
-
-        <Form layout="vertical" onFinish={save}>
-          <Form.Item label="Digest frequency">
-            <Select
-              value={prefs.digest}
-              onChange={(v) => setPrefs((s) => ({ ...s, digest: v }))}
-              options={[
-                { value: "never", label: "Never" },
-                { value: "daily", label: "Daily" },
-                { value: "weekly", label: "Weekly" },
-              ]}
-            />
-          </Form.Item>
-          <Button type="primary" htmlType="submit" loading={loading}>
-            Save notifications
-          </Button>
-        </Form>
-      </Space>
-    </Card>
+    <div className="ant-card ant-card-bordered">
+      <div className="ant-card-head"><div className="ant-card-head-title">Notifications</div></div>
+      <div className="ant-card-body">
+        {loading ? 'Carregando…' : (
+          <>
+            <Space direction="vertical">
+              <Space>
+                Email <Switch checked={!!notif.email} onChange={(v)=>toggle('email', v)} disabled={saving} />
+              </Space>
+              <Space>
+                Push <Switch checked={!!notif.push} onChange={(v)=>toggle('push', v)} disabled={saving} />
+              </Space>
+            </Space>
+            <div style={{ marginTop: 8, minHeight: 20 }}>{status}</div>
+          </>
+        )}
+      </div>
+    </div>
   );
 }

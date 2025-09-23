@@ -1,77 +1,54 @@
-"use client";
-
-import React, { useMemo, useState } from "react";
-import { Card, Form, Input, Space, Button, Alert, message } from "antd";
-import { LockOutlined, EyeInvisibleOutlined, EyeTwoTone } from "@ant-design/icons";
-import SectionTitle from "./SectionTitle";
-import { callAPI } from "./api";
+'use client';
+import React, { useState } from 'react';
+import { Form, Input, Button } from 'antd';
 
 export default function SecurityCard() {
   const [loading, setLoading] = useState(false);
+  const [status, setStatus] = useState('');
+  const API_BASE = (process.env.NEXT_PUBLIC_API_BASE_URL || 'http://localhost:8000').replace(/\/+$/, '');
 
-  const cardStyle = useMemo(
-    () => ({ background: "var(--bg-panel)", borderColor: "var(--border-strong)" }),
-    []
-  );
-
-  const onChangePassword = async (values) => {
-    if (values.new_password !== values.confirm_new_password) {
-      message.error("New password and confirmation do not match.");
+  const onFinish = async (v) => {
+    if (v.new_password !== v.confirm_password) {
+      setStatus('As senhas não coincidem.');
       return;
     }
+    setLoading(true);
+    setStatus('');
     try {
-      setLoading(true);
-      await callAPI("/auth/password/change/", values);
-      message.success("Password changed successfully!");
+      const res = await fetch(`${API_BASE}/api/users/change-password/`, {
+        method: 'POST',
+        credentials: 'include',
+        headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
+        body: JSON.stringify({ current_password: v.current_password, new_password: v.new_password }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (res.ok) setStatus('Senha alterada!');
+      else setStatus(data?.detail || 'Erro ao alterar a senha.');
     } catch {
-      message.error("Could not change password.");
+      setStatus('Erro ao alterar a senha.');
     } finally {
       setLoading(false);
     }
   };
 
   return (
-    <Card title={<SectionTitle icon={<LockOutlined />}>Security</SectionTitle>} style={cardStyle}>
-      <Alert
-        type="info"
-        message="Tip"
-        description="Use a strong password and enable 2FA when available."
-        showIcon
-        style={{ marginBottom: 12 }}
-      />
-      <Form layout="vertical" onFinish={onChangePassword}>
-        <Form.Item label="Current password" name="current_password" rules={[{ required: true }]}>
-          <Input.Password
-            prefix={<LockOutlined />}
-            placeholder="Current password"
-            iconRender={(v) => (v ? <EyeTwoTone /> : <EyeInvisibleOutlined />)}
-          />
-        </Form.Item>
-        <Form.Item label="New password" name="new_password" rules={[{ required: true, min: 6 }]}>
-          <Input.Password
-            prefix={<LockOutlined />}
-            placeholder="New password"
-            iconRender={(v) => (v ? <EyeTwoTone /> : <EyeInvisibleOutlined />)}
-          />
-        </Form.Item>
-        <Form.Item
-          label="Confirm new password"
-          name="confirm_new_password"
-          rules={[{ required: true, min: 6 }]}
-        >
-          <Input.Password
-            prefix={<LockOutlined />}
-            placeholder="Confirm new password"
-            iconRender={(v) => (v ? <EyeTwoTone /> : <EyeInvisibleOutlined />)}
-          />
-        </Form.Item>
-        <Space>
-          <Button type="primary" htmlType="submit" loading={loading}>
-            Change password
-          </Button>
-          <Button disabled>Enable 2FA (soon)</Button>
-        </Space>
-      </Form>
-    </Card>
+    <div className="ant-card ant-card-bordered">
+      <div className="ant-card-head"><div className="ant-card-head-title">Security</div></div>
+      <div className="ant-card-body">
+        <Form layout="vertical" onFinish={onFinish}>
+          <Form.Item label="Senha atual" name="current_password" rules={[{ required: true }]}>
+            <Input.Password />
+          </Form.Item>
+          <Form.Item label="Nova senha" name="new_password" rules={[{ required: true, min: 8 }]}>
+            <Input.Password />
+          </Form.Item>
+          <Form.Item label="Confirmar senha" name="confirm_password" rules={[{ required: true }]}>
+            <Input.Password />
+          </Form.Item>
+          <Button type="primary" htmlType="submit" loading={loading}>Atualizar senha</Button>
+          <div style={{ marginTop: 8, minHeight: 20 }}>{status}</div>
+        </Form>
+      </div>
+    </div>
   );
 }

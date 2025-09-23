@@ -1,56 +1,52 @@
-"use client";
+'use client';
+import React, { useState } from 'react';
+import { Button, Popconfirm } from 'antd';
+import { useRouter } from 'next/navigation';
 
-import React, { useMemo } from "react";
-import { Card, Button, Alert, Modal } from "antd";
-import { ExclamationCircleOutlined } from "@ant-design/icons";
-import SectionTitle from "./SectionTitle";
-import { callAPI } from "./api";
-import { signOut } from "next-auth/react";
+export default function DangerZoneCard({ userId }) {
+  const router = useRouter();
+  const [loading, setLoading] = useState(false);
+  const [status, setStatus] = useState('');
+  const API_BASE = (process.env.NEXT_PUBLIC_API_BASE_URL || 'http://localhost:8000').replace(/\/+$/, '');
 
-export default function DangerZoneCard() {
-  const cardStyle = useMemo(
-    () => ({ background: "var(--bg-panel)", borderColor: "var(--border-strong)" }),
-    []
-  );
-
-  const deleteAccount = async () => {
-    Modal.confirm({
-      title: "Delete your account?",
-      icon: <ExclamationCircleOutlined />,
-      okText: "Delete",
-      okButtonProps: { danger: true },
-      content:
-        "This action is irreversible. All your data will be permanently removed.",
-      onOk: async () => {
-        try {
-          await callAPI("/auth/account/delete/", {});
-          await signOut({ redirect: true, callbackUrl: "/" });
-        } catch {
-          // handled upstream
-        }
-      },
-    });
+  const handleDelete = async () => {
+    setLoading(true);
+    setStatus('');
+    try {
+      const res = await fetch(`${API_BASE}/api/users/${userId}/`, {
+        method: 'DELETE',
+        credentials: 'include',
+        headers: { Accept: 'application/json' },
+      });
+      if (res.status === 204) {
+        router.push('/logout'); // ou '/', conforme seu fluxo
+        return;
+      }
+      const data = await res.json().catch(() => ({}));
+      setStatus(data?.detail || 'Falha ao excluir a conta.');
+    } catch {
+      setStatus('Erro ao excluir a conta.');
+    } finally {
+      setLoading(false);
+    }
   };
 
   return (
-    <Card
-      style={cardStyle}
-      title={
-        <SectionTitle icon={<ExclamationCircleOutlined style={{ color: "#ff4d4f" }} />}>
-          Danger Zone
-        </SectionTitle>
-      }
-    >
-      <Alert
-        type="warning"
-        message="Deleting your account is permanent."
-        description="All your data will be removed. This action cannot be undone."
-        showIcon
-        style={{ marginBottom: 12 }}
-      />
-      <Button danger onClick={deleteAccount}>
-        Delete account
-      </Button>
-    </Card>
+    <div className="ant-card ant-card-bordered">
+      <div className="ant-card-head"><div className="ant-card-head-title">Danger Zone</div></div>
+      <div className="ant-card-body">
+        <Popconfirm
+          title="Excluir conta?"
+          description="Essa ação é irreversível e removerá seus dados."
+          okText="Sim, excluir"
+          cancelText="Cancelar"
+          okButtonProps={{ danger: true, loading }}
+          onConfirm={handleDelete}
+        >
+          <Button danger loading={loading}>Excluir conta</Button>
+        </Popconfirm>
+        <div style={{ marginTop: 8, minHeight: 20 }}>{status}</div>
+      </div>
+    </div>
   );
 }

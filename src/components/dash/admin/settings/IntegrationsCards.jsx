@@ -1,52 +1,75 @@
-"use client";
+'use client';
+import React, { useEffect, useState } from 'react';
+import { Switch, Space } from 'antd';
 
-import React, { useMemo, useState } from "react";
-import { Card, Space, Typography, Button, Tag } from "antd";
-import { ApiOutlined, GithubOutlined, GoogleOutlined } from "@ant-design/icons";
-import SectionTitle from "./SectionTitle";
+export default function IntegrationsCard({ userId }) {
+  const [data, setData] = useState({});
+  const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
+  const [status, setStatus] = useState('');
+  const API_BASE = (process.env.NEXT_PUBLIC_API_BASE_URL || 'http://localhost:8000').replace(/\/+$/, '');
 
-const { Text } = Typography;
+  useEffect(() => {
+    let alive = true;
+    (async () => {
+      try {
+        const res = await fetch(`${API_BASE}/api/users/${userId}/integrations/`, {
+          credentials: 'include',
+          headers: { Accept: 'application/json' },
+        });
+        const json = await res.json();
+        if (!alive) return;
+        setData(json || {});
+      } catch {
+        setStatus('Erro ao carregar integrações.');
+      } finally {
+        alive && setLoading(false);
+      }
+    })();
+    return () => { alive = false; };
+  }, [userId, API_BASE]);
 
-export default function IntegrationsCard() {
-  const [integrations, setIntegrations] = useState([
-    { key: "google", name: "Google", icon: <GoogleOutlined />, connected: false },
-    { key: "github", name: "GitHub", icon: <GithubOutlined />, connected: true },
-    { key: "webhooks", name: "Webhooks", icon: <ApiOutlined />, connected: false },
-  ]);
-
-  const cardStyle = useMemo(
-    () => ({ background: "var(--bg-panel)", borderColor: "var(--border-strong)" }),
-    []
-  );
-
-  const toggle = (key) => {
-    setIntegrations((xs) =>
-      xs.map((i) => (i.key === key ? { ...i, connected: !i.connected } : i))
-    );
+  const toggle = async (key, value) => {
+    const next = { ...data, [key]: value };
+    setData(next);
+    setSaving(true);
+    setStatus('');
+    try {
+      const res = await fetch(`${API_BASE}/api/users/${userId}/integrations/`, {
+        method: 'PATCH',
+        credentials: 'include',
+        headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
+        body: JSON.stringify({ [key]: value }),
+      });
+      const json = await res.json().catch(() => ({}));
+      if (!res.ok) setStatus(json?.detail || 'Erro ao salvar integração.');
+    } catch {
+      setStatus('Erro ao salvar integração.');
+    } finally {
+      setSaving(false);
+    }
   };
 
+  if (loading) return (
+    <div className="ant-card ant-card-bordered">
+      <div className="ant-card-head"><div className="ant-card-head-title">Integrations</div></div>
+      <div className="ant-card-body">Carregando…</div>
+    </div>
+  );
+
+  const google = !!data.google;
+  const slack = !!data.slack;
+
   return (
-    <Card title={<SectionTitle icon={<ApiOutlined />}>Integrations</SectionTitle>} style={cardStyle}>
-      <Space direction="vertical" style={{ width: "100%" }}>
-        {integrations.map((it) => (
-          <Card
-            key={it.key}
-            size="small"
-            style={{ background: "transparent", borderColor: "var(--border-strong)" }}
-          >
-            <Space style={{ width: "100%", justifyContent: "space-between" }}>
-              <Space>
-                {it.icon}
-                <Text>{it.name}</Text>
-                {it.connected ? <Tag color="green">Connected</Tag> : <Tag>Disconnected</Tag>}
-              </Space>
-              <Button onClick={() => toggle(it.key)}>
-                {it.connected ? "Disconnect" : "Connect"}
-              </Button>
-            </Space>
-          </Card>
-        ))}
-      </Space>
-    </Card>
+    <div className="ant-card ant-card-bordered">
+      <div className="ant-card-head"><div className="ant-card-head-title">Integrations</div></div>
+      <div className="ant-card-body">
+        <Space direction="vertical">
+          <Space>Google <Switch checked={google} onChange={(v)=>toggle('google', v)} disabled={saving} /></Space>
+          <Space>Slack <Switch checked={slack} onChange={(v)=>toggle('slack', v)} disabled={saving} /></Space>
+        </Space>
+        <div style={{ marginTop: 8, minHeight: 20 }}>{status}</div>
+      </div>
+    </div>
   );
 }

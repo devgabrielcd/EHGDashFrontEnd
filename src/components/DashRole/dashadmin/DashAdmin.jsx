@@ -9,7 +9,7 @@ import QuickLinks from "@/components/dash/admin/ui/QuickLinks/QuickLinks";
 import TopEntitiesServer from "@/components/dash/admin/ui/TopEntities/TopEntitiesServer";
 import RevenueChartServer from "@/components/dash/admin/ui/RevenueCharts/RevenueChartServer";
 import RecentActivityServer from "@/components/dash/admin/ui/RecentActivity/RecentActivityServer";
-import SystemHealth from "@/components/dash/admin/ui/SystemHealth/SystemHealth";
+import SystemHealth from "@/components/dash/admin/ui/SystemHealth/SystemHealth.jsx";
 
 import styles from "./dash-admin.module.css";
 

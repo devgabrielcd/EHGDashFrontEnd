@@ -1,83 +1,104 @@
-"use client";
+'use client';
+import React, { useEffect, useState } from 'react';
+import { Form, Input, Button, Avatar, Space, Skeleton } from 'antd';
+import { apiBase, authHeaders } from '@/lib/apiHeaders';
 
-import React, { useMemo, useState } from "react";
-import { Card, Form, Input, Space, Button, Tag, Typography, Avatar, message } from "antd";
-import { UserOutlined, MailOutlined, MobileOutlined } from "@ant-design/icons";
-import SectionTitle from "./SectionTitle";
-import { useSession } from "next-auth/react";
-import { callAPI } from "./api";
+export default function ProfileCard({ userId }) {
+  const [form] = Form.useForm();
+  const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
+  const [status, setStatus] = useState('');
+  const [me, setMe] = useState(null);
+  const API_BASE = apiBase();
 
-const { Text } = Typography;
+  useEffect(() => {
+    let alive = true;
+    (async () => {
+      try {
+        const res = await fetch(`${API_BASE}/api/users/${userId}/`, {
+          credentials: 'include',
+          headers: authHeaders(),
+        });
+        const data = await res.json();
+        if (!alive) return;
+        setMe(data);
+        form.setFieldsValue({
+          first_name: data?.user?.first_name,
+          last_name: data?.user?.last_name,
+          email: data?.user?.email,
+          phone_number: data?.profile?.phone_number,
+        });
+      } catch {
+        setStatus('Erro ao carregar perfil.');
+      } finally {
+        alive && setLoading(false);
+      }
+    })();
+    return () => { alive = false; };
+  }, [userId, form, API_BASE]);
 
-export default function ProfileCard() {
-  const { data: session } = useSession();
-  const user = session?.user || {};
-  const details = user?.details || {};
-  const firstName = details.first_name || user.first_name || user.name || "User";
-  const email = details.email || user.email || "";
-
-  const [loading, setLoading] = useState(false);
-
-  const initial = {
-    first_name: details.first_name || user.first_name || "",
-    last_name: details.last_name || user.last_name || "",
-    email: email || "",
-    phone: details.phone_number || "",
-  };
-
-  const cardStyle = useMemo(
-    () => ({ background: "var(--bg-panel)", borderColor: "var(--border-strong)" }),
-    []
-  );
-
-  const onSave = async (values) => {
+  const onFinish = async (values) => {
+    setSaving(true);
+    setStatus('');
     try {
-      setLoading(true);
-      await callAPI("/api/profile/update/", values);
-      message.success("Profile updated!");
+      const res = await fetch(`${API_BASE}/api/users/${userId}/`, {
+        method: 'PATCH',
+        credentials: 'include',
+        headers: { ...authHeaders(), 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          first_name: values.first_name,
+          last_name: values.last_name,
+          email: values.email,
+          phone_number: values.phone_number,
+        }),
+      });
+      const data = await res.json();
+      if (res.ok) {
+        setMe(data);
+        setStatus('Perfil atualizado!');
+      } else {
+        setStatus(data?.detail || 'Falha ao salvar.');
+      }
     } catch {
-      message.error("Could not update profile.");
+      setStatus('Erro ao salvar.');
     } finally {
-      setLoading(false);
+      setSaving(false);
     }
   };
 
+  const disabled = loading || saving;
+
   return (
-    <Card title={<SectionTitle icon={<UserOutlined />}>Profile</SectionTitle>} style={cardStyle}>
-      <Space size={12} style={{ marginBottom: 16 }}>
-        <Avatar size={56} icon={<UserOutlined />} />
-        <div>
-          <div style={{ fontWeight: 700 }}>{firstName}</div>
-          {email ? <Text type="secondary">{email}</Text> : null}
-        </div>
-      </Space>
-
-      <Form layout="vertical" onFinish={onSave} initialValues={initial}>
-        <Form.Item label="First name" name="first_name">
-          <Input prefix={<UserOutlined />} placeholder="First name" />
-        </Form.Item>
-        <Form.Item label="Last name" name="last_name">
-          <Input prefix={<UserOutlined />} placeholder="Last name" />
-        </Form.Item>
-        <Form.Item label="Email" name="email" rules={[{ type: "email" }]}>
-          <Input prefix={<MailOutlined />} placeholder="name@company.com" />
-        </Form.Item>
-        <Form.Item label="Phone" name="phone">
-          <Input prefix={<MobileOutlined />} placeholder="+1 555 123 456" />
-        </Form.Item>
-
-        <Space>
-          <Button type="primary" htmlType="submit" loading={loading}>
-            Save profile
-          </Button>
-          <Tag color="geekblue">
-            {details.user_role ? String(details.user_role).toUpperCase() : "USER"}
-          </Tag>
-          {details.user_type ? (
-            <Tag color="purple">{String(details.user_type).toUpperCase()}</Tag>
-          ) : null}
+    <div className="ant-card ant-card-bordered">
+      <div className="ant-card-head"><div className="ant-card-head-title">Profile</div></div>
+      <div className="ant-card-body">
+        <Space align="start" size="large">
+          <Avatar size={64}>
+            {(me?.user?.first_name || me?.user?.username || '?')?.[0]?.toUpperCase()}
+          </Avatar>
+          <div style={{ minWidth: 320 }}>
+            {loading && <Skeleton active paragraph={{ rows: 3 }} />}
+            <Form form={form} layout="vertical" onFinish={onFinish}>
+              <Form.Item label="First name" name="first_name" rules={[{ required: true }]}>
+                <Input disabled={disabled} />
+              </Form.Item>
+              <Form.Item label="Last name" name="last_name" rules={[{ required: true }]}>
+                <Input disabled={disabled} />
+              </Form.Item>
+              <Form.Item label="Email" name="email" rules={[{ type: 'email' }]}>
+                <Input disabled={disabled} />
+              </Form.Item>
+              <Form.Item label="Phone" name="phone_number">
+                <Input disabled={disabled} />
+              </Form.Item>
+              <Button type="primary" htmlType="submit" loading={saving} disabled={loading}>
+                Salvar
+              </Button>
+            </Form>
+            <div style={{ marginTop: 8, minHeight: 20 }}>{status}</div>
+          </div>
         </Space>
-      </Form>
-    </Card>
+      </div>
+    </div>
   );
 }

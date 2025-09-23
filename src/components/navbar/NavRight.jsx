@@ -1,3 +1,4 @@
+// src/components/navbar/NavRight.jsx
 "use client";
 
 import React, { useRef, useState, useMemo } from "react";
@@ -19,22 +20,26 @@ import {
   SunOutlined,
   UserOutlined,
 } from "@ant-design/icons";
-import { signOut } from "next-auth/react";
+import { signIn, signOut } from "next-auth/react";
 import { useRouter } from "next/navigation";
 
-const API_BASE =
-  process.env.NEXT_PUBLIC_BACKEND_BASE_URL ?? "http://localhost:8000";
+const API_BASE = process.env.NEXT_PUBLIC_BACKEND_BASE_URL ?? "http://localhost:8000";
 
 export default function NavRight({
   notificationsCount = 0,
   onNavigate,
   isDark,
   setTheme,
-  profileMenuItems, // opcional: se não vier, monto um default
+  profileMenuItems, // já vem pronto do NavbarClient (com base no isAuthenticated SSR)
   collapsed = false,
-  session,
+
+  // 🔽 novas props vindas do SERVER
+  isAuthenticated = false,
+  user = null,
+  accessToken = null,
   displayName = "User",
   avatarSrc,
+
   iconSize = 25,
 }) {
   const { token } = theme.useToken();
@@ -85,18 +90,22 @@ export default function NavRight({
   };
 
   // ---------- Edit Profile ----------
-  const userId = session?.user?.id ?? session?.user?.details?.id;
+  const userId =
+    user?.id ??
+    user?.details?.id ??
+    null;
+
   const initialUser = useMemo(() => {
-    // tenta pegar dos details (quando disponíveis)
-    const d = session?.user?.details || {};
+    const d = user?.details || {};
     return {
-      first_name: d.first_name ?? "",
-      last_name: d.last_name ?? "",
-      email: d.email ?? session?.user?.email ?? "",
+      first_name: d.first_name ?? user?.first_name ?? "",
+      last_name: d.last_name ?? user?.last_name ?? "",
+      email: d.email ?? user?.email ?? "",
     };
-  }, [session]);
+  }, [user]);
 
   const openEdit = () => {
+    if (!isAuthenticated) return signIn();
     form.setFieldsValue(initialUser);
     setEditOpen(true);
   };
@@ -108,13 +117,12 @@ export default function NavRight({
         message.error("User ID not found.");
         return;
       }
-      if (!session?.accessToken) {
+      if (!accessToken) {
         message.error("Not authenticated.");
         return;
       }
       setSaving(true);
 
-      // Monta payload (senha opcional)
       const payload = {
         first_name: values.first_name,
         last_name: values.last_name,
@@ -126,7 +134,7 @@ export default function NavRight({
         method: "PATCH",
         headers: {
           "Content-Type": "application/json",
-          Authorization: `Bearer ${session.accessToken}`,
+          Authorization: `Bearer ${accessToken}`,
         },
         body: JSON.stringify(payload),
       });
@@ -138,8 +146,8 @@ export default function NavRight({
 
       message.success("Profile updated!");
       setEditOpen(false);
-      // dica: se quiser refletir na UI sem refazer login,
-      // você pode fazer um refetch dos detalhes no cliente aqui.
+      // Dica: se quiser refletir na UI sem refazer login,
+      // faça um refetch do endpoint de sessão/detalhes aqui no cliente.
     } catch (err) {
       console.error(err);
       message.error(err?.message || "Failed to update profile");
@@ -148,32 +156,21 @@ export default function NavRight({
     }
   };
 
-  // ---------- Menu padrão (se não vier via props) ----------
+  // Se o parent não mandou um menu, fazemos um fallback correto aqui:
   const defaultMenu = useMemo(() => {
-    return [
-      {
-        key: "profile",
-        label: "My profile",
-        onClick: () => router.push("/dashboard/profile"),
-      },
-      {
-        key: "edit",
-        label: "Edit profile",
-        onClick: openEdit,
-      },
-      { type: "divider" },
-      {
-        key: "signout",
-        label: "Sign out",
-        danger: true,
-        onClick: () => signOut({ callbackUrl: "/" }),
-      },
-    ];
-  }, [router]);
+    if (isAuthenticated) {
+      return [
+        { key: "profile", label: "My profile", onClick: () => router.push("/dashboard/profile") },
+        { key: "edit", label: "Edit profile", onClick: openEdit },
+        { type: "divider" },
+        { key: "signout", label: "Sign out", danger: true, onClick: () => signOut({ callbackUrl: "/" }) },
+      ];
+    }
+    return [{ key: "login", label: "Login", onClick: () => signIn() }];
+  }, [isAuthenticated, router]);
 
-  const finalMenuItems = profileMenuItems && profileMenuItems.length
-    ? profileMenuItems
-    : defaultMenu;
+  const finalMenuItems =
+    profileMenuItems && profileMenuItems.length ? profileMenuItems : defaultMenu;
 
   return (
     <>
@@ -239,13 +236,15 @@ export default function NavRight({
                   size={32}
                   src={avatarSrc}
                   style={{
-                    backgroundColor: isDark ? token.colorFillSecondary : "transparent",
+                    backgroundColor: isDark
+                      ? token.colorFillSecondary
+                      : "transparent",
                   }}
                 />
               ) : (
                 <UserOutlined style={{ fontSize: iconSize, color: text }} />
               )}
-              {!collapsed && session && <span>{displayName}</span>}
+              {!collapsed && isAuthenticated && <span>{displayName}</span>}
             </Button>
           </Dropdown>
         </div>
@@ -289,7 +288,6 @@ export default function NavRight({
             name="password"
             label="New password"
             tooltip="Leave blank to keep current password"
-            rules={[]}
           >
             <Input.Password placeholder="••••••••" />
           </Form.Item>

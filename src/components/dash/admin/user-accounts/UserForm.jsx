@@ -1,149 +1,168 @@
 "use client";
 
 import React, { useEffect } from "react";
-import { Modal, Form, Input, Select } from "antd";
+import { Modal, Form, Input, Select, Row, Col } from "antd";
 
 export default function UserForm({
   open,
   onCancel,
   onSave,
-  initialData, // { user:{...}, profile:{...} }
-  isEdit,
-  roles,
-  types,
-  companyOptions,   // [{label,value}]
-  coverageOptions,  // [{label,value}]
-  planTypeOptions,  // [{label,value}]
+  isEdit = false,
+  initialData = null,
+  roles = [],
+  types = [],
+  companyOptions = [],
+  coverageOptions = [],
+  planTypeOptions = [],
+  formTypeOptions = [],
 }) {
   const [form] = Form.useForm();
 
-  const ensureOptionVisible = (options, value) => {
-    if (!value) return options;
-    const exists = (options || []).some((o) => String(o.value) === String(value));
-    return exists ? options : [{ label: String(value), value: String(value) }, ...(options || [])];
-  };
-
-  const initialCompanyId = initialData?.profile?.company_id ?? initialData?.profile?.company?.id;
-  const initialCoverage = initialData?.profile?.insuranceCoverage;
-  const initialPlanType = initialData?.profile?.coverageType;
-
-  const companies = ensureOptionVisible(companyOptions, initialCompanyId);
-  const coverages = ensureOptionVisible(coverageOptions, initialCoverage);
-  const planTypes = ensureOptionVisible(planTypeOptions, initialPlanType);
-
   useEffect(() => {
     if (!open) return;
-    if (initialData?.user) {
-      form.setFieldsValue({
-        username: initialData.user.username,
-        email: initialData.user.email,
-        first_name: initialData.user.first_name,
-        last_name: initialData.user.last_name,
-        user_role_id: initialData.profile?.user_role_id,
-        user_type_id: initialData.profile?.user_type_id,
-        company_id: initialCompanyId,
-        insuranceCoverage: initialCoverage,
-        coverageType: initialPlanType,
-      });
-    } else {
-      form.resetFields();
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [initialData, open]);
 
-  const handleSave = () => {
-    form.validateFields().then(onSave).catch(() => {});
+    let init = {};
+    if (initialData?.user) {
+      const u = initialData.user || {};
+      const p = initialData.profile || {};
+      init = {
+        username: u.username || "",
+        email: u.email || "",
+        first_name: u.first_name || "",
+        last_name: u.last_name || "",
+        user_role_id: p.user_role_id || undefined,
+        user_type_id: p.user_type_id || undefined,
+        company_id: p.company || p.company_id || undefined,
+        insuranceCoverage: p.insuranceCoverage || undefined,
+        coverageType: p.coverageType || undefined,
+        formType: undefined, // vem do app forms, opcional aqui
+      };
+    }
+    form.setFieldsValue(init);
+  }, [open, initialData, form]);
+
+  const handleOk = async () => {
+    const values = await form.validateFields();
+    onSave(values);
   };
 
   return (
     <Modal
       open={open}
-      title={isEdit ? "Edit User" : "Create New User"}
-      okText={isEdit ? "Update" : "Create"}
+      title={isEdit ? "Edit user" : "Create user"}
       onCancel={onCancel}
-      onOk={handleSave}
+      onOk={handleOk}
+      okText={isEdit ? "Save" : "Create"}
+      destroyOnHidden        // ✅ substitui destroyOnClose
+      afterOpenChange={(visible) => {
+        if (!visible) form.resetFields(); // limpa quando fecha
+      }}
     >
       <Form form={form} layout="vertical" name="user_form">
-        <Form.Item
-          name="username"
-          label="Username"
-          rules={[{ required: true, message: "Please input the username!" }]}
-        >
-          <Input />
-        </Form.Item>
+        <Row gutter={12}>
+          <Col span={12}>
+            <Form.Item
+              name="username"
+              label="Username"
+              rules={[{ required: true, message: "Username is required" }]}
+            >
+              <Input />
+            </Form.Item>
+          </Col>
+          <Col span={12}>
+            <Form.Item
+              name="email"
+              label="Email"
+              rules={[{ required: true, type: "email" }]}
+            >
+              <Input />
+            </Form.Item>
+          </Col>
+        </Row>
 
-        <Form.Item
-          name="email"
-          label="Email"
-          rules={[
-            { required: true, message: "Please input the email!" },
-            { type: "email" },
-          ]}
-        >
-          <Input />
-        </Form.Item>
+        {!isEdit && (
+          <Row gutter={12}>
+            <Col span={12}>
+              <Form.Item
+                name="password"
+                label="Password"
+                rules={[{ required: true, min: 6 }]}
+              >
+                <Input.Password />
+              </Form.Item>
+            </Col>
+          </Row>
+        )}
 
-        <Form.Item
-          name="password"
-          label="Password"
-          rules={isEdit ? [] : [{ required: true, message: "Please input the password!" }]}
-        >
-          <Input.Password placeholder={isEdit ? "Leave blank to keep current password" : ""} />
-        </Form.Item>
+        <Row gutter={12}>
+          <Col span={12}>
+            <Form.Item name="first_name" label="First name" rules={[{ required: true }]}>
+              <Input />
+            </Form.Item>
+          </Col>
+          <Col span={12}>
+            <Form.Item name="last_name" label="Last name" rules={[{ required: true }]}>
+              <Input />
+            </Form.Item>
+          </Col>
+        </Row>
 
-        <Form.Item name="first_name" label="First Name">
-          <Input />
-        </Form.Item>
+        <Row gutter={12}>
+          <Col span={12}>
+            <Form.Item name="user_role_id" label="User role">
+              <Select options={roles} allowClear placeholder="Select a role" />
+            </Form.Item>
+          </Col>
+          <Col span={12}>
+            <Form.Item name="user_type_id" label="User type">
+              <Select options={types} allowClear placeholder="Select a type" />
+            </Form.Item>
+          </Col>
+        </Row>
 
-        <Form.Item name="last_name" label="Last Name">
-          <Input />
-        </Form.Item>
+        <Row gutter={12}>
+          <Col span={12}>
+            <Form.Item name="company_id" label="Company">
+              <Select
+                options={companyOptions.filter((o) => o.value !== "")}
+                allowClear
+                placeholder="Select a company"
+              />
+            </Form.Item>
+          </Col>
 
-        <Form.Item
-          name="user_role_id"
-          label="User Role"
-          rules={[{ required: true, message: "Please select a role!" }]}
-        >
-          <Select options={roles} />
-        </Form.Item>
+          <Col span={12}>
+            <Form.Item name="insuranceCoverage" label="Plan coverage">
+              <Select
+                options={coverageOptions}
+                allowClear
+                placeholder="Health, Dental, Life..."
+              />
+            </Form.Item>
+          </Col>
+        </Row>
 
-        <Form.Item
-          name="user_type_id"
-          label="User Type"
-          rules={[{ required: true, message: "Please select a type!" }]}
-        >
-          <Select options={types} />
-        </Form.Item>
+        <Row gutter={12}>
+          <Col span={12}>
+            <Form.Item name="coverageType" label="Plan type">
+              <Select
+                options={planTypeOptions}
+                allowClear
+                placeholder="Individual / Family"
+              />
+            </Form.Item>
+          </Col>
 
-        <Form.Item name="company_id" label="Company" tooltip="Company linked to this user">
-          <Select
-            allowClear
-            options={companies}
-            placeholder="Select a company"
-            showSearch
-            optionFilterProp="label"
-          />
-        </Form.Item>
-
-        <Form.Item name="insuranceCoverage" label="Plan Coverage" tooltip="Coverage / line of business">
-          <Select
-            allowClear
-            options={coverages}
-            placeholder="Select a coverage"
-            showSearch
-            optionFilterProp="label"
-          />
-        </Form.Item>
-
-        <Form.Item name="coverageType" label="Plan Type" tooltip="Plan type (ex.: Individual, Family...)">
-          <Select
-            allowClear
-            options={planTypes}
-            placeholder="Select a plan type"
-            showSearch
-            optionFilterProp="label"
-          />
-        </Form.Item>
+          <Col span={12}>
+            <Form.Item name="formType" label="Form type (optional)">
+              <Select
+                options={formTypeOptions}
+                allowClear
+                placeholder="Homepage / Referral / Appointment"
+              />
+            </Form.Item>
+          </Col>
+        </Row>
       </Form>
     </Modal>
   );

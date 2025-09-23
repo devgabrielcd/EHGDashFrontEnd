@@ -1,9 +1,10 @@
+// src/app/dashboard/layout.jsx
 import { redirect } from "next/navigation";
 import { auth } from "@/auth";
 
 import DashboardProviders from "@/components/providers/DashboardProviders"; // CLIENT
-import SiderClient from "@/components/Sidebar/SiderClient";                 // CLIENT
-import Navbar from "@/components/navbar/Navbar";                          // CLIENT
+import SiderClient from "@/components/Sidebar/SiderClient";               // CLIENT
+import Navbar from "@/components/navbar/NavbarServer";                    // ⬅️ agora é a SERVER navbar
 import AppFooter from "@/components/AppFooter/AppFooter";
 import Loader from "@/components/Loader/Loader";
 
@@ -34,45 +35,45 @@ export default async function DashboardLayout({ children }) {
 
   return (
     <Loader>
-    <DashboardProviders>
-      {/* Contêiner raiz (server) */}
-      <div style={{ minHeight: "100vh", background: "var(--bg-layout)" }}>
-        {/* Sidebar fixa (client) */}
-        <SiderClient initialItems={initialSidebarItems} />
+      <DashboardProviders>
+        {/* Contêiner raiz (server) */}
+        <div style={{ minHeight: "100vh", background: "var(--bg-layout)" }}>
+          {/* Sidebar fixa (client) */}
+          <SiderClient initialItems={initialSidebarItems} />
 
-        {/* Main (empurrado pela sidebar via CSS var) */}
-        <div
-          style={{
-            marginLeft: "var(--sidebar-w, 80px)",
-            transition: "margin-left .2s",
-            background: "var(--bg-layout)",
-            minHeight: "100vh",
-            display: "flex",
-            flexDirection: "column",
-          }}
-        >
-          {/* Navbar (client) */}
-          <Navbar brand="Dashboard" />
-
-          {/* Conteúdo */}
-          <main
+          {/* Main (empurrado pela sidebar via CSS var) */}
+          <div
             style={{
-              padding: 24,
+              marginLeft: "var(--sidebar-w, 80px)",
+              transition: "margin-left .2s",
               background: "var(--bg-layout)",
-              flex: 1,
-              minHeight: 0,
+              minHeight: "100vh",
+              display: "flex",
+              flexDirection: "column",
             }}
           >
-            {children}
-          </main>
+            {/* Navbar (SERVER -> injeta sessão inicial no client) */}
+            <Navbar brand="Dashboard" />
 
-          {/* Rodapé */}
+            {/* Conteúdo */}
+            <main
+              style={{
+                padding: 24,
+                background: "var(--bg-layout)",
+                flex: 1,
+                minHeight: 0,
+              }}
+            >
+              {children}
+            </main>
+
+            {/* Rodapé */}
             <AppFooter style={{ textAlign: "center", padding: "12px 0" }}>
               EHGCorp by 12Peak
             </AppFooter>
+          </div>
         </div>
-      </div>
-    </DashboardProviders>
+      </DashboardProviders>
     </Loader>
   );
 }
