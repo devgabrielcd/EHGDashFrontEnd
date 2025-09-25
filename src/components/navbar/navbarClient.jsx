@@ -60,7 +60,7 @@ export default function NavbarClient({
     if (isAuthenticated) {
       return [
         { key: "profile", icon: <UserOutlined />, label: "Profile", onClick: () => onNavigate?.("/dashboard/profile") },
-        { key: "settings", icon: <SettingOutlined />, label: "Settings", onClick: () => onNavigate?.("/settings") },
+        { key: "settings", icon: <SettingOutlined />, label: "Settings", onClick: () => onNavigate?.("/dashboard/settings") },
         { type: "divider" },
         { key: "logout", danger: true, icon: <LogoutOutlined />, label: "Logout", onClick: () => signOut({ callbackUrl: "/" }) },
       ];

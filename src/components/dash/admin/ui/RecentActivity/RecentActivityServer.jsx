@@ -1,12 +1,13 @@
-// NADA de "use client" aqui – ESTE é Server Component
+// ESTE arquivo é Server Component (sem "use client")
 import { auth } from "@/auth";
 import RecentActivity from "./RecentActivity";
 
 const API_BASE =
   process.env.NEXT_PUBLIC_BACKEND_BASE_URL ?? "http://localhost:8000";
 
-async function fetchRecentEntities(token, company = "all", limit = 12) {
-  const url = new URL(`${API_BASE}/api/top_entities/`);
+/** Busca o feed unificado de atividades */
+async function fetchActivityFeed(token, { company = "all", limit = 12 } = {}) {
+  const url = new URL(`${API_BASE}/api/activity_feed/`);
   url.searchParams.set("limit", String(limit));
   if (company !== "all") url.searchParams.set("company", String(company));
 
@@ -14,16 +15,13 @@ async function fetchRecentEntities(token, company = "all", limit = 12) {
     cache: "no-store",
     headers: { Authorization: `Bearer ${token}` },
   });
-
   if (!res.ok) return [];
   const data = await res.json();
-
-  // Garante ordenação por data
-  return [...data].sort(
-    (a, b) => new Date(b?.datetime ?? 0) - new Date(a?.datetime ?? 0)
-  );
+  // já vem ordenado por created_at desc no backend; garantimos formato
+  return Array.isArray(data) ? data : [];
 }
 
+/** formata um ISO datetime em DD/MM/YYYY HH:mm */
 function fmtTime(iso) {
   if (!iso) return "—";
   const d = new Date(iso);
@@ -36,52 +34,79 @@ function fmtTime(iso) {
   return `${dd}/${mm}/${yyyy} ${hh}:${mi}`;
 }
 
-function colorByRole(role) {
-  const r = String(role || "").toLowerCase();
-  if (r.includes("admin")) return "blue";
-  if (r.includes("employee")) return "green";
-  if (r.includes("customer")) return "purple";
+/** cor por tipo de ação (antd Timeline aceita: 'blue' | 'red' | 'green' | 'gray' | 'orange' | 'purple') */
+function colorByAction(action = "") {
+  const a = action.toLowerCase();
+  if (a.startsWith("user.create") || a.startsWith("forms.submit")) return "blue";
+  if (a.startsWith("user.update") || a.startsWith("prefs.") || a.startsWith("integrations.")) return "green";
+  if (a.startsWith("user.delete") || a.startsWith("session.revoke")) return "red";
+  if (a.startsWith("password.")) return "orange";
+  if (a.startsWith("auth.login")) return "purple";
+  if (a.startsWith("auth.logout")) return "gray";
   return "gray";
 }
 
+/** rótulo amigável para a ação */
+function labelForAction(action = "") {
+  const a = action.toLowerCase();
+  if (a === "user.create") return "User created";
+  if (a === "user.update" || a === "user.update.self") return "User updated";
+  if (a === "user.delete" || a === "user.delete.self") return "User deleted";
+  if (a === "password.change") return "Password changed";
+  if (a === "prefs.update") return "Preferences updated";
+  if (a === "integrations.update") return "Integrations updated";
+  if (a === "session.revoke") return "Session revoked";
+  if (a === "auth.login") return "Login";
+  if (a === "auth.logout") return "Logout";
+  if (a === "forms.submit") return "Form submitted";
+  return action || "Activity";
+}
+
+function fullName(obj = {}) {
+  const f = obj.firstName || obj.first_name || "";
+  const l = obj.lastName || obj.last_name || "";
+  return [f, l].filter(Boolean).join(" ").trim();
+}
+
+/** Monta a linha de texto para cada item */
+function buildText(row) {
+  const label = labelForAction(row.action);
+  const actor = fullName(row.actor || {}) || row?.actor?.username || "System";
+  const target =
+    fullName(row.target || {}) || row?.target?.username || null;
+  const company = row.company_name || null;
+  const msg = row.message || null;
+
+  const parts = [label];
+  parts.push(`by ${actor}`);
+  if (target) parts.push(`→ ${target}`);
+  if (company) parts.push(`— ${company}`);
+  if (msg) parts.push(`• ${msg}`);
+
+  return parts.join(" ");
+}
+
+/**
+ * Server wrapper: pega sessão, consulta o feed e converte para itens do componente RecentActivity
+ */
 export default async function RecentActivityServer({
   company = "all",
   limit = 12,
   title = "Recent Activities",
-  height = 220, // altura da área scroll
+  height = 220,
 }) {
   const session = await auth();
   if (!session?.accessToken) {
     return <RecentActivity title={title} items={[]} height={height} />;
   }
 
-  const rows = await fetchRecentEntities(session.accessToken, company, limit);
+  const rows = await fetchActivityFeed(session.accessToken, { company, limit });
 
-  const items = rows.map((u) => {
-    const first = u?.firstName ?? u?.firstname ?? "";
-    const last = u?.lastName ?? u?.lastname ?? "";
-    const name = [first, last].filter(Boolean).join(" ").trim() || "New User";
-
-    const companyName = u?.company_name ?? "—";
-    // /api/top_entities/ pode não ter user_role – tratamos como "user"
-    const role = (u?.user_role || "user").toString();
-    const coverage = u?.insuranceCoverage ?? null;
-    const coverageType = u?.coverageType ?? null;
-
-    const parts = [
-      `New ${role}`.replace(/\s+/g, " ").trim(),
-      name !== "New User" ? `(${name})` : null,
-      companyName !== "—" ? `— ${companyName}` : null,
-      coverage ? `• ${coverage}` : null,
-      coverageType ? `(${coverageType})` : null,
-    ].filter(Boolean);
-
-    return {
-      time: fmtTime(u?.datetime),
-      text: parts.join(" "),
-      color: colorByRole(role),
-    };
-  });
+  const items = rows.map((row) => ({
+    time: fmtTime(row.datetime),
+    text: buildText(row),
+    color: colorByAction(row.action),
+  }));
 
   return <RecentActivity title={title} items={items} height={height} />;
 }

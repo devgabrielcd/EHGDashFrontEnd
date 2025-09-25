@@ -25,17 +25,22 @@ export default function UserForm({
     if (initialData?.user) {
       const u = initialData.user || {};
       const p = initialData.profile || {};
+
+      // 🔑 normalize company_id como string para casar com options [{label, value: "1"}]
+      const companyId =
+        p?.company ?? p?.company_id ?? "";
+
       init = {
         username: u.username || "",
         email: u.email || "",
         first_name: u.first_name || "",
         last_name: u.last_name || "",
-        user_role_id: p.user_role_id || undefined,
-        user_type_id: p.user_type_id || undefined,
-        company_id: p.company || p.company_id || undefined,
-        insuranceCoverage: p.insuranceCoverage || undefined,
-        coverageType: p.coverageType || undefined,
-        formType: undefined, // vem do app forms, opcional aqui
+        user_role_id: p.user_role_id ?? undefined,
+        user_type_id: p.user_type_id ?? undefined,
+        company_id: companyId !== "" && companyId != null ? String(companyId) : "", // 👈 aqui
+        insuranceCoverage: p.insuranceCoverage ?? undefined,
+        coverageType: p.coverageType ?? undefined,
+        formType: undefined, // opcional
       };
     }
     form.setFieldsValue(init);
@@ -43,7 +48,7 @@ export default function UserForm({
 
   const handleOk = async () => {
     const values = await form.validateFields();
-    onSave(values);
+    onSave(values); // backend já aceita string, ele faz _safe_int
   };
 
   return (
@@ -53,9 +58,10 @@ export default function UserForm({
       onCancel={onCancel}
       onOk={handleOk}
       okText={isEdit ? "Save" : "Create"}
-      destroyOnHidden        // ✅ substitui destroyOnClose
+      forceRender           // garante que <Form> existe (evita warning do useForm)
+      destroyOnHidden       // API correta no AntD v5
       afterOpenChange={(visible) => {
-        if (!visible) form.resetFields(); // limpa quando fecha
+        if (!visible) form.resetFields();
       }}
     >
       <Form form={form} layout="vertical" name="user_form">
@@ -124,6 +130,7 @@ export default function UserForm({
           <Col span={12}>
             <Form.Item name="company_id" label="Company">
               <Select
+                // options devem ser [{label: company.name, value: String(company.id)}]
                 options={companyOptions.filter((o) => o.value !== "")}
                 allowClear
                 placeholder="Select a company"

@@ -1,230 +1,149 @@
 "use client";
 
-import React, { useEffect, useMemo, useState } from "react";
-import { Form, Input, Button, Select, Row, Col, Divider, Typography, message } from "antd";
-
-function toInitialValues(user = {}, profile = {}) {
-  // tenta vários formatos possíveis que seu serializer pode mandar
-  const companyId =
-    profile?.company_id ??
-    (typeof profile?.company === "number" ? profile.company : profile?.company?.id) ??
-    null;
-
-  return {
-    username: user?.username ?? "",
-    email: user?.email ?? profile?.email ?? "",
-    first_name: profile?.first_name ?? user?.first_name ?? "",
-    last_name: profile?.last_name ?? user?.last_name ?? "",
-    phone_number: profile?.phone_number ?? "",
-    company_id: companyId,
-    coverageType: profile?.coverageType ?? "",         // 'individual' | 'family' | ...
-    insuranceCoverage: profile?.insuranceCoverage ?? "",// 'Medicare' | 'Dental' | ...
-    password: "", // opcional
-  };
-}
-
-function mapToPatchBody(values) {
-  const body = {
-    username: values.username?.trim(),
-    email: values.email?.trim(),
-    first_name: values.first_name?.trim(),
-    last_name: values.last_name?.trim(),
-    phone_number: values.phone_number?.trim(),
-    coverageType: values.coverageType || null,
-    insuranceCoverage: values.insuranceCoverage || null,
-    company_id: values.company_id ? Number(values.company_id) : null,
-  };
-  if (values.password) {
-    body.password = values.password;
-  }
-  return body;
-}
-
-function companyOptionsFromList(companies = []) {
-  return [
-    { label: "— selecionar —", value: null },
-    ...companies
-      .filter((c) => c?.id && c?.name)
-      .map((c) => ({ label: c.name, value: c.id })),
-  ];
-}
+import React, { useEffect } from "react";
+import { Card, Form, Input, Select, Row, Col, Button, App } from "antd";
 
 export default function ProfileEditorClient({
-  initialUser,
-  initialProfile,
-  companies,
+  initialUser = {},
+  initialProfile = {},
+  companies = [],
   apiBase,
   accessToken,
 }) {
   const [form] = Form.useForm();
-  const [saving, setSaving] = useState(false);
+  const { message } = App.useApp();
 
-  const initialValues = useMemo(
-    () => toInitialValues(initialUser, initialProfile),
-    [initialUser, initialProfile]
+  // Normaliza companies => [{label, value}]
+  const companyOptions = [{ label: "Select a company", value: "" }].concat(
+    (companies || [])
+      .filter((c) => c?.id && c?.name)
+      .map((c) => ({ label: c.name, value: String(c.id) }))
   );
 
-  // Garante que o form reflita mudanças de props (navegação/refresh)
   useEffect(() => {
-    form.setFieldsValue(initialValues);
-  }, [form, initialValues]);
+    const init = {
+      first_name: initialUser.first_name || "",
+      last_name: initialUser.last_name || "",
+      email: initialUser.email || "",
+      phone_number: initialProfile.phone_number || "",
+      company_id:
+        initialProfile.company != null ? String(initialProfile.company) : "",
+      insuranceCoverage: initialProfile.insuranceCoverage || undefined,
+      coverageType: initialProfile.coverageType || undefined,
+    };
+    form.setFieldsValue(init);
+  }, [initialUser, initialProfile, form]);
 
-  const onFinish = async (values) => {
-    setSaving(true);
+  const handleSave = async () => {
     try {
-      const body = mapToPatchBody(values);
-      const userId = initialUser?.id;
-      if (!userId) throw new Error("ID do usuário não encontrado.");
+      const values = await form.validateFields();
 
-      const res = await fetch(`${apiBase}/api/users/${userId}/`, {
+      const payload = {
+        first_name: values.first_name,
+        last_name: values.last_name,
+        email: values.email,
+        phone_number: values.phone_number ?? null,
+        company_id: values.company_id || null,
+        insuranceCoverage: values.insuranceCoverage || null,
+        coverageType: values.coverageType || null,
+      };
+
+      const res = await fetch(`${apiBase}/api/users/${initialUser.id || initialProfile?.user || initialUser?.id}/`, {
         method: "PATCH",
         headers: {
           "Content-Type": "application/json",
           Authorization: `Bearer ${accessToken}`,
         },
-        body: JSON.stringify(body),
+        body: JSON.stringify(payload),
       });
 
-      if (!res.ok) {
-        const txt = await res.text().catch(() => "");
-        if (res.status === 403) {
-          throw new Error("Sem permissão para atualizar (PATCH é restrito a admins).");
-        }
-        throw new Error(`Falha ao salvar: HTTP ${res.status} ${txt || res.statusText}`);
-      }
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(data?.detail || `HTTP ${res.status}`);
 
-      const json = await res.json().catch(() => ({}));
-      message.success("Perfil atualizado com sucesso!");
-
-      // Rehidrata com a resposta do backend (fonte da verdade)
-      const next = toInitialValues(json?.user, json?.profile);
-      form.setFieldsValue(next);
-      form.resetFields(["password"]);
-    } catch (e) {
-      message.error(e?.message || "Erro ao salvar.");
-    } finally {
-      setSaving(false);
+      message.success("Profile updated!");
+    } catch (err) {
+      console.error(err);
+      message.error(err?.message || "Failed to update profile");
     }
   };
 
-  const coverageTypeOptions = [
-    { label: "— selecionar —", value: "" },
-    { label: "individual", value: "individual" },
-    { label: "family", value: "family" },
-  ];
-
-  const insuranceCoverageOptions = [
-    { label: "— selecionar —", value: "" },
-    { label: "Medicare", value: "Medicare" },
-    { label: "Dental", value: "Dental" },
-    { label: "Life", value: "Life" },
-    { label: "Health", value: "Health" },
-    { label: "Vision", value: "Vision" },
-  ];
-
   return (
-    <div className="max-w-3xl">
-      <Form form={form} layout="vertical" initialValues={initialValues} onFinish={onFinish}>
-        <Row gutter={16}>
-          <Col xs={24} md={12}>
+    <Card title="My Profile">
+      <Form form={form} layout="vertical" name="profile_editor_form">
+        <Row gutter={12}>
+          <Col span={12}>
             <Form.Item
-              label="Username"
-              name="username"
-              rules={[{ required: true, message: "Informe o username" }]}
+              name="first_name"
+              label="First name"
+              rules={[{ required: true, message: "Please input your first name" }]}
             >
-              <Input placeholder="seu.username" />
+              <Input />
             </Form.Item>
           </Col>
-
-          <Col xs={24} md={12}>
+          <Col span={12}>
             <Form.Item
-              label="Email"
-              name="email"
-              rules={[
-                { required: true, message: "Informe o email" },
-                { type: "email", message: "Email inválido" },
-              ]}
+              name="last_name"
+              label="Last name"
+              rules={[{ required: true, message: "Please input your last name" }]}
             >
-              <Input placeholder="voce@empresa.com" />
+              <Input />
             </Form.Item>
           </Col>
+        </Row>
 
-          <Col xs={24} md={12}>
-            <Form.Item label="Primeiro nome" name="first_name">
-              <Input placeholder="Primeiro nome" />
+        <Row gutter={12}>
+          <Col span={12}>
+            <Form.Item name="email" label="Email" rules={[{ required: true, type: "email" }]}>
+              <Input />
             </Form.Item>
           </Col>
-
-          <Col xs={24} md={12}>
-            <Form.Item label="Sobrenome" name="last_name">
-              <Input placeholder="Sobrenome" />
+          <Col span={12}>
+            <Form.Item name="phone_number" label="Phone">
+              <Input />
             </Form.Item>
           </Col>
+        </Row>
 
-          <Col xs={24} md={12}>
-            <Form.Item label="Telefone" name="phone_number">
-              <Input placeholder="(00) 00000-0000" />
+        <Row gutter={12}>
+          <Col span={12}>
+            <Form.Item name="company_id" label="Company">
+              <Select options={companyOptions} allowClear placeholder="Select a company" />
             </Form.Item>
           </Col>
-
-          <Col xs={24} md={12}>
-            <Form.Item label="Empresa" name="company_id">
+          <Col span={12}>
+            <Form.Item name="insuranceCoverage" label="Plan coverage">
               <Select
-                options={companyOptionsFromList(companies)}
-                placeholder="Selecione a empresa"
                 allowClear
+                placeholder="Health / Dental / Life / Vision"
+                options={[
+                  { label: "Health", value: "Health" },
+                  { label: "Dental", value: "Dental" },
+                  { label: "Life", value: "Life" },
+                  { label: "Vision", value: "Vision" },
+                  { label: "Medicare", value: "Medicare" },
+                ]}
               />
             </Form.Item>
           </Col>
         </Row>
 
-        <Divider>Planos (System Health)</Divider>
-
-        <Row gutter={16}>
-          <Col xs={24} md={12}>
-            <Form.Item label="Coverage Type" name="coverageType">
-              <Select options={coverageTypeOptions} />
-            </Form.Item>
-          </Col>
-
-          <Col xs={24} md={12}>
-            <Form.Item label="Insurance Coverage" name="insuranceCoverage">
-              <Select options={insuranceCoverageOptions} />
-            </Form.Item>
-          </Col>
-        </Row>
-
-        <Divider>Segurança</Divider>
-
-        <Row gutter={16}>
-          <Col xs={24} md={12}>
-            <Form.Item
-              label="Nova senha"
-              name="password"
-              tooltip="Opcional — preencha apenas se deseja alterar"
-            >
-              <Input.Password placeholder="••••••••" />
+        <Row gutter={12}>
+          <Col span={12}>
+            <Form.Item name="coverageType" label="Plan type">
+              <Select
+                allowClear
+                placeholder="Individual / Family"
+                options={[
+                  { label: "individual", value: "individual" },
+                  { label: "family", value: "family" },
+                ]}
+              />
             </Form.Item>
           </Col>
         </Row>
 
-        <Row justify="end" gutter={12}>
-          <Col>
-            <Button htmlType="reset">Limpar</Button>
-          </Col>
-          <Col>
-            <Button type="primary" htmlType="submit" loading={saving}>
-              Salvar alterações
-            </Button>
-          </Col>
-        </Row>
+        <Button type="primary" onClick={handleSave}>Save changes</Button>
       </Form>
-
-      <Typography.Paragraph type="secondary" className="mt-4">
-        Observação: Caso receba <code>403 Forbidden</code> ao salvar, é porque o PATCH está
-        restrito a administradores no backend. Você pode liberar alteração do próprio usuário
-        ou manter apenas para admins.
-      </Typography.Paragraph>
-    </div>
+    </Card>
   );
 }

@@ -3,6 +3,7 @@ import Link from "next/link";
 import styles from "./page.module.css";
 import { SignIn } from "@/components/auth/sign-in";
 import Signout from "@/components/auth/signout-button"; // 👈 importa o botão client
+import SignInClient from "@/components/auth/SignInClient";
 
 export default async function Home() {
   const session = await auth();
@@ -35,7 +36,9 @@ export default async function Home() {
 
               {/* Login form */}
               <div className={styles.formWrapper} id="login">
-                <SignIn />
+                {/* <SignIn /> */}
+                <SignInClient className={styles.form} /> {/* 👈 aqui */}
+
               </div>
 
               <div className={styles.authLinks}>

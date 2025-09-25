@@ -1,70 +1,99 @@
 'use client';
-import React, { useEffect, useState } from 'react';
-import { Radio } from 'antd';
+import React, { useEffect, useMemo, useState } from 'react';
+import { Radio, Card } from 'antd';
+import { apiBase, authHeaders } from '@/lib/apiHeaders';
 
 export default function AppearanceCard({ userId }) {
-  const [theme, setTheme] = useState('system');
+  const API_BASE = apiBase();
+  const [resolvedId, setResolvedId] = useState(
+    Number.isFinite(Number(userId)) && Number(userId) > 0 ? Number(userId) : null
+  );
   const [loading, setLoading] = useState(true);
-  const [saving, setSaving] = useState(false);
+  const [theme, setTheme] = useState('system');
   const [status, setStatus] = useState('');
-  const API_BASE = (process.env.NEXT_PUBLIC_API_BASE_URL || 'http://localhost:8000').replace(/\/+$/, '');
 
+  // resolve userId
   useEffect(() => {
     let alive = true;
     (async () => {
       try {
-        const res = await fetch(`${API_BASE}/api/users/${userId}/preferences/`, {
+        if (resolvedId) return;
+        const r = await fetch(`${API_BASE}/api/auth/session/`, {
           credentials: 'include',
-          headers: { Accept: 'application/json' },
+          headers: authHeaders(),
+        });
+        const d = await r.json();
+        if (!alive) return;
+        const id = Number(d?.user?.id);
+        if (id) setResolvedId(id); else setStatus('Unable to identify the user.');
+      } catch {
+        alive && setStatus('Unable to identify the user.');
+      }
+    })();
+    return () => { alive = false; };
+  }, [API_BASE, resolvedId]);
+
+  const effectiveUserId = useMemo(() => {
+    const pid = Number(userId);
+    if (Number.isFinite(pid) && pid > 0) return pid;
+    return resolvedId;
+  }, [userId, resolvedId]);
+
+  // load current prefs
+  useEffect(() => {
+    let alive = true;
+    (async () => {
+      if (!effectiveUserId) return;
+      setLoading(true);
+      try {
+        const res = await fetch(`${API_BASE}/api/users/${effectiveUserId}/preferences/`, {
+          credentials: 'include',
+          headers: authHeaders(),
         });
         const data = await res.json();
         if (!alive) return;
         setTheme(data?.theme || 'system');
       } catch {
-        setStatus('Erro ao carregar preferências.');
+        setStatus('Failed to load preferences.');
       } finally {
         alive && setLoading(false);
       }
     })();
     return () => { alive = false; };
-  }, [userId, API_BASE]);
+  }, [effectiveUserId, API_BASE]);
 
-  const onChange = async (e) => {
-    const value = e.target.value;
-    setTheme(value);
-    setSaving(true);
+  const changeTheme = async (val) => {
+    setTheme(val);
     setStatus('');
     try {
-      const res = await fetch(`${API_BASE}/api/users/${userId}/preferences/`, {
+      const res = await fetch(`${API_BASE}/api/users/${effectiveUserId}/preferences/`, {
         method: 'PATCH',
         credentials: 'include',
-        headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
-        body: JSON.stringify({ theme: value }),
+        headers: { ...authHeaders(), 'Content-Type': 'application/json' },
+        body: JSON.stringify({ theme: val }),
       });
-      const data = await res.json().catch(() => ({}));
-      if (!res.ok) setStatus(data?.detail || 'Erro ao salvar tema.');
+      if (!res.ok) {
+        const d = await res.json().catch(() => ({}));
+        setStatus(d?.detail || 'Failed to update theme.');
+      }
     } catch {
-      setStatus('Erro ao salvar tema.');
-    } finally {
-      setSaving(false);
+      setStatus('Error while updating theme.');
     }
   };
 
   return (
-    <div className="ant-card ant-card-bordered">
-      <div className="ant-card-head"><div className="ant-card-head-title">Appearance</div></div>
-      <div className="ant-card-body">
-        {loading ? 'Carregando…' : (
-          <>
-            <Radio.Group onChange={onChange} value={theme} disabled={saving}>
-              <Radio.Button value="light">Light</Radio.Button>
-              <Radio.Button value="dark">Dark</Radio.Button>
-              <Radio.Button value="system">System</Radio.Button>
-            </Radio.Group>
-            <div style={{ marginTop: 8, minHeight: 20 }}>{status}</div>
-          </>
-        )}
-      </div>
-    </div>
+    <Card title="Appearance" variant="outlined" className="ant-card" loading={loading}>
+      <Radio.Group
+        onChange={(e) => changeTheme(e.target.value)}
+        value={theme}
+        optionType="button"
+        buttonStyle="solid"
+      >
+        <Radio.Button value="light">Light</Radio.Button>
+        <Radio.Button value="dark">Dark</Radio.Button>
+        <Radio.Button value="system">System</Radio.Button>
+      </Radio.Group>
+      <div style={{ marginTop: 8, minHeight: 20 }}>{status}</div>
+    </Card>
   );
 }

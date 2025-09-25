@@ -1,75 +1,99 @@
 'use client';
-import React, { useEffect, useState } from 'react';
-import { Switch, Space } from 'antd';
+import React, { useEffect, useMemo, useState } from 'react';
+import { Switch, Space, Card } from 'antd';
+import { apiBase, authHeaders } from '@/lib/apiHeaders';
 
 export default function IntegrationsCard({ userId }) {
-  const [data, setData] = useState({});
+  const API_BASE = apiBase();
+  const [resolvedId, setResolvedId] = useState(
+    Number.isFinite(Number(userId)) && Number(userId) > 0 ? Number(userId) : null
+  );
   const [loading, setLoading] = useState(true);
-  const [saving, setSaving] = useState(false);
+  const [google, setGoogle] = useState(false);
+  const [slack, setSlack] = useState(false);
   const [status, setStatus] = useState('');
-  const API_BASE = (process.env.NEXT_PUBLIC_API_BASE_URL || 'http://localhost:8000').replace(/\/+$/, '');
 
+  // resolve userId
   useEffect(() => {
     let alive = true;
     (async () => {
       try {
-        const res = await fetch(`${API_BASE}/api/users/${userId}/integrations/`, {
+        if (resolvedId) return;
+        const r = await fetch(`${API_BASE}/api/auth/session/`, {
           credentials: 'include',
-          headers: { Accept: 'application/json' },
+          headers: authHeaders(),
         });
-        const json = await res.json();
+        const d = await r.json();
         if (!alive) return;
-        setData(json || {});
+        const id = Number(d?.user?.id);
+        if (id) setResolvedId(id); else setStatus('Unable to identify the user.');
       } catch {
-        setStatus('Erro ao carregar integrações.');
+        alive && setStatus('Unable to identify the user.');
+      }
+    })();
+    return () => { alive = false; };
+  }, [API_BASE, resolvedId]);
+
+  const effectiveUserId = useMemo(() => {
+    const pid = Number(userId);
+    if (Number.isFinite(pid) && pid > 0) return pid;
+    return resolvedId;
+  }, [userId, resolvedId]);
+
+  // load
+  useEffect(() => {
+    let alive = true;
+    (async () => {
+      if (!effectiveUserId) return;
+      setLoading(true);
+      try {
+        const res = await fetch(`${API_BASE}/api/users/${effectiveUserId}/integrations/`, {
+          credentials: 'include',
+          headers: authHeaders(),
+        });
+        const data = await res.json();
+        if (!alive) return;
+        setGoogle(!!data?.google);
+        setSlack(!!data?.slack);
+      } catch {
+        setStatus('Failed to load integrations.');
       } finally {
         alive && setLoading(false);
       }
     })();
     return () => { alive = false; };
-  }, [userId, API_BASE]);
+  }, [effectiveUserId, API_BASE]);
 
-  const toggle = async (key, value) => {
-    const next = { ...data, [key]: value };
-    setData(next);
-    setSaving(true);
+  const update = async (next) => {
     setStatus('');
     try {
-      const res = await fetch(`${API_BASE}/api/users/${userId}/integrations/`, {
+      const res = await fetch(`${API_BASE}/api/users/${effectiveUserId}/integrations/`, {
         method: 'PATCH',
         credentials: 'include',
-        headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
-        body: JSON.stringify({ [key]: value }),
+        headers: { ...authHeaders(), 'Content-Type': 'application/json' },
+        body: JSON.stringify(next),
       });
-      const json = await res.json().catch(() => ({}));
-      if (!res.ok) setStatus(json?.detail || 'Erro ao salvar integração.');
+      if (!res.ok) {
+        const d = await res.json().catch(() => ({}));
+        setStatus(d?.detail || 'Failed to update integrations.');
+      }
     } catch {
-      setStatus('Erro ao salvar integração.');
-    } finally {
-      setSaving(false);
+      setStatus('Error while updating integrations.');
     }
   };
 
-  if (loading) return (
-    <div className="ant-card ant-card-bordered">
-      <div className="ant-card-head"><div className="ant-card-head-title">Integrations</div></div>
-      <div className="ant-card-body">Carregando…</div>
-    </div>
-  );
-
-  const google = !!data.google;
-  const slack = !!data.slack;
-
   return (
-    <div className="ant-card ant-card-bordered">
-      <div className="ant-card-head"><div className="ant-card-head-title">Integrations</div></div>
-      <div className="ant-card-body">
-        <Space direction="vertical">
-          <Space>Google <Switch checked={google} onChange={(v)=>toggle('google', v)} disabled={saving} /></Space>
-          <Space>Slack <Switch checked={slack} onChange={(v)=>toggle('slack', v)} disabled={saving} /></Space>
-        </Space>
-        <div style={{ marginTop: 8, minHeight: 20 }}>{status}</div>
-      </div>
-    </div>
+    <Card title="Integrations" variant="outlined" className="ant-card" loading={loading}>       <Space size="large" direction="vertical">
+        <div>
+          <span style={{ marginRight: 12 }}>Google</span>
+          <Switch checked={google} onChange={(v) => { setGoogle(v); update({ google: v, slack }); }} />
+        </div>
+        <div>
+          <span style={{ marginRight: 12 }}>Slack</span>
+          <Switch checked={slack} onChange={(v) => { setSlack(v); update({ google, slack: v }); }} />
+        </div>
+      </Space>
+      <div style={{ marginTop: 8, minHeight: 20 }}>{status}</div>
+    </Card>
   );
 }

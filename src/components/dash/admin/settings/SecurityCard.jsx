@@ -1,33 +1,38 @@
 'use client';
 import React, { useState } from 'react';
-import { Form, Input, Button } from 'antd';
+import { Form, Input, Button, Space } from 'antd';
+import { apiBase, authHeaders } from '@/lib/apiHeaders';
 
 export default function SecurityCard() {
-  const [loading, setLoading] = useState(false);
+  const [form] = Form.useForm();
+  const API_BASE = apiBase();
+  const [saving, setSaving] = useState(false);
   const [status, setStatus] = useState('');
-  const API_BASE = (process.env.NEXT_PUBLIC_API_BASE_URL || 'http://localhost:8000').replace(/\/+$/, '');
 
-  const onFinish = async (v) => {
-    if (v.new_password !== v.confirm_password) {
-      setStatus('As senhas não coincidem.');
-      return;
-    }
-    setLoading(true);
+  const onFinish = async (values) => {
+    setSaving(true);
     setStatus('');
     try {
       const res = await fetch(`${API_BASE}/api/users/change-password/`, {
         method: 'POST',
         credentials: 'include',
-        headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
-        body: JSON.stringify({ current_password: v.current_password, new_password: v.new_password }),
+        headers: { ...authHeaders(), 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          current_password: values.current_password,
+          new_password: values.new_password,
+        }),
       });
       const data = await res.json().catch(() => ({}));
-      if (res.ok) setStatus('Senha alterada!');
-      else setStatus(data?.detail || 'Erro ao alterar a senha.');
+      if (res.ok) {
+        setStatus('Password changed successfully.');
+        form.resetFields();
+      } else {
+        setStatus(data?.detail || 'Failed to change the password.');
+      }
     } catch {
-      setStatus('Erro ao alterar a senha.');
+      setStatus('Error while changing the password.');
     } finally {
-      setLoading(false);
+      setSaving(false);
     }
   };
 
@@ -35,19 +40,20 @@ export default function SecurityCard() {
     <div className="ant-card ant-card-bordered">
       <div className="ant-card-head"><div className="ant-card-head-title">Security</div></div>
       <div className="ant-card-body">
-        <Form layout="vertical" onFinish={onFinish}>
-          <Form.Item label="Senha atual" name="current_password" rules={[{ required: true }]}>
-            <Input.Password />
-          </Form.Item>
-          <Form.Item label="Nova senha" name="new_password" rules={[{ required: true, min: 8 }]}>
-            <Input.Password />
-          </Form.Item>
-          <Form.Item label="Confirmar senha" name="confirm_password" rules={[{ required: true }]}>
-            <Input.Password />
-          </Form.Item>
-          <Button type="primary" htmlType="submit" loading={loading}>Atualizar senha</Button>
-          <div style={{ marginTop: 8, minHeight: 20 }}>{status}</div>
-        </Form>
+        <Space direction="vertical" style={{ width: '100%' }}>
+          <Form form={form} layout="vertical" onFinish={onFinish}>
+            <Form.Item label="Current password" name="current_password" rules={[{ required: true }]}>
+              <Input.Password />
+            </Form.Item>
+            <Form.Item label="New password" name="new_password" rules={[{ required: true, min: 6 }]}>
+              <Input.Password />
+            </Form.Item>
+            <Button type="primary" htmlType="submit" loading={saving}>
+              Update password
+            </Button>
+          </Form>
+          <div style={{ minHeight: 20 }}>{status}</div>
+        </Space>
       </div>
     </div>
   );

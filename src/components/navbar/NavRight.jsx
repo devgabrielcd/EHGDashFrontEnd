@@ -12,7 +12,7 @@ import {
   Modal,
   Form,
   Input,
-  message,
+  message,       // vamos usar o hook message.useMessage()
 } from "antd";
 import {
   BellOutlined,
@@ -23,17 +23,17 @@ import {
 import { signIn, signOut } from "next-auth/react";
 import { useRouter } from "next/navigation";
 
-const API_BASE = process.env.NEXT_PUBLIC_BACKEND_BASE_URL ?? "http://localhost:8000";
+const API_BASE =
+  process.env.NEXT_PUBLIC_BACKEND_BASE_URL ?? "http://localhost:8000";
 
 export default function NavRight({
   notificationsCount = 0,
-  onNavigate,
+  onNavigate, // opcional; usamos router.push se não vier
   isDark,
   setTheme,
-  profileMenuItems, // já vem pronto do NavbarClient (com base no isAuthenticated SSR)
   collapsed = false,
 
-  // 🔽 novas props vindas do SERVER
+  // vindos do server:
   isAuthenticated = false,
   user = null,
   accessToken = null,
@@ -46,14 +46,17 @@ export default function NavRight({
   const text = token.colorText;
   const router = useRouter();
 
-  const [openProfile, setOpenProfile] = useState(false);
-  const hoverOpenTimer = useRef(null);
-  const hoverCloseTimer = useRef(null);
+  // ✅ hook do message (evita o warning)
+  const [messageApi, contextHolder] = message.useMessage();
 
+  const [openProfile, setOpenProfile] = useState(false);
   const [editOpen, setEditOpen] = useState(false);
   const [saving, setSaving] = useState(false);
   const [form] = Form.useForm();
 
+  // --- Hover timers para abrir/fechar suave ---
+  const hoverOpenTimer = useRef(null);
+  const hoverCloseTimer = useRef(null);
   const clearTimers = () => {
     if (hoverOpenTimer.current) {
       clearTimeout(hoverOpenTimer.current);
@@ -64,12 +67,10 @@ export default function NavRight({
       hoverCloseTimer.current = null;
     }
   };
-
   const handleEnter = () => {
     clearTimers();
     hoverOpenTimer.current = setTimeout(() => setOpenProfile(true), 80);
   };
-
   const handleLeave = () => {
     clearTimers();
     hoverCloseTimer.current = setTimeout(() => setOpenProfile(false), 180);
@@ -89,11 +90,8 @@ export default function NavRight({
     borderRadius: 10,
   };
 
-  // ---------- Edit Profile ----------
-  const userId =
-    user?.id ??
-    user?.details?.id ??
-    null;
+  // ---------- Edit Profile (modal simples) ----------
+  const userId = user?.id ?? user?.details?.id ?? null;
 
   const initialUser = useMemo(() => {
     const d = user?.details || {};
@@ -113,14 +111,8 @@ export default function NavRight({
   const handleSave = async () => {
     try {
       const values = await form.validateFields();
-      if (!userId) {
-        message.error("User ID not found.");
-        return;
-      }
-      if (!accessToken) {
-        message.error("Not authenticated.");
-        return;
-      }
+      if (!userId) { messageApi.error("User ID not found."); return; }
+      if (!accessToken) { messageApi.error("Not authenticated."); return; }
       setSaving(true);
 
       const payload = {
@@ -128,7 +120,6 @@ export default function NavRight({
         last_name: values.last_name,
         email: values.email,
       };
-      if (values.password) payload.password = values.password;
 
       const res = await fetch(`${API_BASE}/api/users/${userId}/`, {
         method: "PATCH",
@@ -138,42 +129,63 @@ export default function NavRight({
         },
         body: JSON.stringify(payload),
       });
-
       const json = await res.json().catch(() => ({}));
-      if (!res.ok) {
-        throw new Error(json?.detail || `HTTP ${res.status}`);
-      }
+      if (!res.ok) throw new Error(json?.detail || `HTTP ${res.status}`);
 
-      message.success("Profile updated!");
+      messageApi.success("Profile updated!");
       setEditOpen(false);
-      // Dica: se quiser refletir na UI sem refazer login,
-      // faça um refetch do endpoint de sessão/detalhes aqui no cliente.
     } catch (err) {
       console.error(err);
-      message.error(err?.message || "Failed to update profile");
+      messageApi.error(err?.message || "Failed to update profile");
     } finally {
       setSaving(false);
     }
   };
 
-  // Se o parent não mandou um menu, fazemos um fallback correto aqui:
-  const defaultMenu = useMemo(() => {
+  // ---------- Navegação utilitária ----------
+  const go = (path) => {
+    if (onNavigate) onNavigate(path);
+    else router.push(path);
+  };
+
+  // ---------- Menu ----------
+  const items = useMemo(() => {
     if (isAuthenticated) {
       return [
-        { key: "profile", label: "My profile", onClick: () => router.push("/dashboard/profile") },
-        { key: "edit", label: "Edit profile", onClick: openEdit },
+        { key: "profile", label: "Profile" },   // abre modal
+        { key: "settings", label: "Settings" }, // vai pra /dashboard/settings
         { type: "divider" },
-        { key: "signout", label: "Sign out", danger: true, onClick: () => signOut({ callbackUrl: "/" }) },
+        { key: "signout", label: "Sign out", danger: true },
       ];
     }
-    return [{ key: "login", label: "Login", onClick: () => signIn() }];
-  }, [isAuthenticated, router]);
+    return [{ key: "login", label: "Login" }];
+  }, [isAuthenticated]);
 
-  const finalMenuItems =
-    profileMenuItems && profileMenuItems.length ? profileMenuItems : defaultMenu;
+  const onMenuClick = ({ key }) => {
+    setOpenProfile(false);
+    switch (key) {
+      case "profile":
+        openEdit();
+        break;
+      case "settings":
+        go("/dashboard/settings");
+        break;
+      case "signout":
+        signOut({ callbackUrl: "/" });
+        break;
+      case "login":
+        signIn();
+        break;
+      default:
+        break;
+    }
+  };
 
   return (
     <>
+      {/* ✅ precisa estar no JSX para o message funcionar */}
+      {contextHolder}
+
       <div
         style={{
           display: "flex",
@@ -188,7 +200,7 @@ export default function NavRight({
             <button
               aria-label="Open Notifications"
               style={iconBtn}
-              onClick={() => onNavigate?.("/notifications")}
+              onClick={() => go("/notifications")}
             >
               <BellOutlined />
             </button>
@@ -206,22 +218,23 @@ export default function NavRight({
           </button>
         </Tooltip>
 
-        {/* Perfil */}
+        {/* Perfil (hover + click) */}
         <div
           onMouseEnter={handleEnter}
           onMouseLeave={handleLeave}
           style={{ display: "flex", alignItems: "center" }}
         >
           <Dropdown
-            menu={{ items: finalMenuItems }}
+            menu={{ items, onClick: onMenuClick }}
             placement="bottomRight"
             open={openProfile}
             onOpenChange={(v) => setOpenProfile(v)}
-            overlayStyle={{ minWidth: 200 }}
+            overlayStyle={{ minWidth: 220 }}
             trigger={["hover", "click"]}
           >
             <Button
               type="text"
+              onClick={() => setOpenProfile((p) => !p)}
               style={{
                 color: text,
                 height: 42,
@@ -258,6 +271,8 @@ export default function NavRight({
         confirmLoading={saving}
         onCancel={() => setEditOpen(false)}
         onOk={handleSave}
+        destroyOnHidden
+        afterOpenChange={(vis) => { if (!vis) form.resetFields(); }}
       >
         <Form layout="vertical" form={form} name="edit_profile_form">
           <Form.Item
@@ -282,14 +297,6 @@ export default function NavRight({
             rules={[{ required: true, type: "email" }]}
           >
             <Input />
-          </Form.Item>
-
-          <Form.Item
-            name="password"
-            label="New password"
-            tooltip="Leave blank to keep current password"
-          >
-            <Input.Password placeholder="••••••••" />
           </Form.Item>
         </Form>
       </Modal>

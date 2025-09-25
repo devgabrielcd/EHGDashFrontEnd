@@ -1,87 +1,108 @@
-//'use client';
-import React, { useEffect, useState } from 'react';
-import { List, Button, Tag } from 'antd';
+'use client';
+import React, { useEffect, useMemo, useState } from 'react';
+import { List, Button, Card, Empty } from 'antd';
+import { apiBase, authHeaders } from '@/lib/apiHeaders';
 
 export default function SessionsCard({ userId }) {
-  const [sessions, setSessions] = useState([]);
+  const API_BASE = apiBase();
+  const [resolvedId, setResolvedId] = useState(
+    Number.isFinite(Number(userId)) && Number(userId) > 0 ? Number(userId) : null
+  );
   const [loading, setLoading] = useState(true);
-  const [revoking, setRevoking] = useState(null);
+  const [sessions, setSessions] = useState([]);
   const [status, setStatus] = useState('');
-  const API_BASE = (process.env.NEXT_PUBLIC_API_BASE_URL || 'http://localhost:8000').replace(/\/+$/, '');
+
+  // resolve userId
+  useEffect(() => {
+    let alive = true;
+    (async () => {
+      try {
+        if (resolvedId) return;
+        const r = await fetch(`${API_BASE}/api/auth/session/`, {
+          credentials: 'include',
+          headers: authHeaders(),
+        });
+        const d = await r.json();
+        if (!alive) return;
+        const id = Number(d?.user?.id);
+        if (id) setResolvedId(id); else setStatus('Unable to identify the user.');
+      } catch {
+        alive && setStatus('Unable to identify the user.');
+      }
+    })();
+    return () => { alive = false; };
+  }, [API_BASE, resolvedId]);
+
+  const effectiveUserId = useMemo(() => {
+    const pid = Number(userId);
+    if (Number.isFinite(pid) && pid > 0) return pid;
+    return resolvedId;
+  }, [userId, resolvedId]);
 
   const load = async () => {
+    if (!effectiveUserId) return;
     setLoading(true);
     setStatus('');
     try {
-      const res = await fetch(`${API_BASE}/api/users/${userId}/sessions/`, {
+      const res = await fetch(`${API_BASE}/api/users/${effectiveUserId}/sessions/`, {
         credentials: 'include',
-        headers: { Accept: 'application/json' },
+        headers: authHeaders(),
       });
       const data = await res.json();
-      if (res.ok) setSessions(data || []);
-      else setStatus(data?.detail || 'Erro ao carregar sessões.');
+      if (Array.isArray(data)) setSessions(data); else setSessions([]);
     } catch {
-      setStatus('Erro ao carregar sessões.');
+      setStatus('Failed to load sessions.');
     } finally {
       setLoading(false);
     }
   };
 
-  useEffect(() => { load(); /* eslint-disable-next-line react-hooks/exhaustive-deps */ }, [userId]);
+  useEffect(() => { load(); /* eslint-disable-next-line */ }, [effectiveUserId]);
 
   const revoke = async (key) => {
-    setRevoking(key);
     setStatus('');
     try {
-      const res = await fetch(`${API_BASE}/api/users/${userId}/sessions/${key}/`, {
+      const res = await fetch(`${API_BASE}/api/users/${effectiveUserId}/sessions/${key}/`, {
         method: 'DELETE',
         credentials: 'include',
-        headers: { Accept: 'application/json' },
+        headers: authHeaders(),
       });
-      const data = await res.json().catch(() => ({}));
       if (res.ok) {
-        await load();
+        setSessions((prev) => prev.filter((s) => s.id !== key));
       } else {
-        setStatus(data?.detail || 'Não foi possível revogar.');
+        const d = await res.json().catch(() => ({}));
+        setStatus(d?.detail || 'Failed to revoke session.');
       }
     } catch {
-      setStatus('Não foi possível revogar.');
-    } finally {
-      setRevoking(null);
+      setStatus('Error while revoking session.');
     }
   };
 
   return (
-    <div className="ant-card ant-card-bordered">
-      <div className="ant-card-head"><div className="ant-card-head-title">Sessions</div></div>
-      <div className="ant-card-body">
+    <Card title="Sessions" variant="outlined" className="ant-card" loading={loading}>
+      {sessions.length === 0 ? (
+        <Empty description="No active sessions." />
+      ) : (
         <List
-          loading={loading}
           dataSource={sessions}
-          locale={{ emptyText: 'Sem sessões.' }}
           renderItem={(s) => (
             <List.Item
               actions={[
-                <Button
-                  danger
-                  onClick={() => revoke(s.id)}
-                  loading={revoking === s.id}
-                  disabled={s.current && sessions.length === 1}
-                  key="revoke"
-                >
-                  Revogar
-                </Button>
+                <Button danger size="small" key="revoke" onClick={() => revoke(s.id)}>
+                  Revoke
+                </Button>,
               ]}
             >
               <List.Item.Meta
-                title={<>{s.device} {s.current && <Tag color="green">Atual</Tag>}</>}
-                description={s.last_active_at ? `Último acesso: ${new Date(s.last_active_at).toLocaleString()}` : null}
+                title={s.device || 'Unknown device'}
+                description={`${s.ip || 'Unknown IP'} • Last active: ${s.last_active_at || '—'}`}
               />
+              {s.current ? <span style={{ fontSize: 12, opacity: 0.7 }}>current</span> : null}
             </List.Item>
           )}
         />
-        <div style={{ marginTop: 8, minHeight: 20 }}>{status}</div>
-      </div>
-    </div>
+      )}
+      <div style={{ marginTop: 8, minHeight: 20 }}>{status}</div>
+    </Card>
   );
 }
